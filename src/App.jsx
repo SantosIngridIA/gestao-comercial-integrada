@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   BarChart3,
   Boxes,
   Building2,
   CreditCard,
+  Edit3,
   FileText,
   Home,
   LogIn,
@@ -13,6 +14,8 @@ import {
   Package,
   Plus,
   Receipt,
+  RotateCcw,
+  Save,
   Search,
   ShoppingCart,
   Trash2,
@@ -39,8 +42,8 @@ const currency = (value) =>
 
 const getToday = () => new Date().toISOString().slice(0, 10);
 const today = getToday();
-
 const chartColors = ["#2563eb", "#059669", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2"];
+const storageKey = "gestao-comercial-integrada-v2";
 
 const initialProducts = [
   { id: 1, name: "Camiseta Básica", sku: "CAM-001", category: "Vestuário", description: "Camiseta algodão", cost: 18, price: 39.9, stock: 32, minStock: 10, status: "Ativo" },
@@ -96,6 +99,15 @@ function getSaleTotal(sale) {
   return Math.max(subtotal - (Number(sale.discount) || 0), 0);
 }
 
+function readStorage() {
+  try {
+    const saved = localStorage.getItem(storageKey);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
 function StatCard({ title, value, icon: Icon, caption }) {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100">
@@ -111,11 +123,14 @@ function StatCard({ title, value, icon: Icon, caption }) {
   );
 }
 
-function SectionTitle({ title, subtitle }) {
+function SectionTitle({ title, subtitle, actions }) {
   return (
-    <div className="mb-6">
-      <h1 className="text-2xl font-bold text-slate-950">{title}</h1>
-      <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+    <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-950">{title}</h1>
+        <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+      </div>
+      {actions}
     </div>
   );
 }
@@ -131,16 +146,24 @@ function Badge({ children, tone = "blue" }) {
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${styles[tone] || styles.blue}`}>{children}</span>;
 }
 
+const emptyProduct = { name: "", sku: "", category: "", description: "", cost: "", price: "", stock: "", minStock: "", status: "Ativo" };
+const emptyCustomer = { name: "", document: "", phone: "", email: "", address: "", birthday: "", notes: "", status: "Novo" };
+
 function App() {
+  const saved = readStorage();
   const [logged, setLogged] = useState(false);
   const [active, setActive] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [products, setProducts] = useState(initialProducts);
-  const [customers, setCustomers] = useState(initialCustomers);
-  const [sales, setSales] = useState(initialSales);
-  const [movements, setMovements] = useState(initialMovements);
+  const [products, setProducts] = useState(saved?.products || initialProducts);
+  const [customers, setCustomers] = useState(saved?.customers || initialCustomers);
+  const [sales, setSales] = useState(saved?.sales || initialSales);
+  const [movements, setMovements] = useState(saved?.movements || initialMovements);
   const [cart, setCart] = useState([]);
   const [toast, setToast] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem(storageKey, JSON.stringify({ products, customers, sales, movements }));
+  }, [products, customers, sales, movements]);
 
   const showToast = (message) => {
     setToast(message);
@@ -150,7 +173,7 @@ function App() {
 
   const totalToday = sales.filter((sale) => sale.date === today && sale.status === "Concluída").reduce((sum, sale) => sum + getSaleTotal(sale), 0);
   const totalMonth = sales.filter((sale) => sale.status === "Concluída").reduce((sum, sale) => sum + getSaleTotal(sale), 0);
-  const lowStock = products.filter((product) => product.stock <= product.minStock);
+  const lowStock = products.filter((product) => product.stock <= product.minStock && product.status === "Ativo");
 
   const productSales = useMemo(() => {
     const salesMap = {};
@@ -178,104 +201,117 @@ function App() {
     return Object.entries(dayMap).map(([date, total]) => ({ date, total })).sort((a, b) => a.date.localeCompare(b.date));
   }, [sales]);
 
-  const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0), [cart]);
-
-  const handleNavigate = (key) => {
-    setActive(key);
-    setSidebarOpen(false);
+  const resetData = () => {
+    localStorage.removeItem(storageKey);
+    setProducts(initialProducts);
+    setCustomers(initialCustomers);
+    setSales(initialSales);
+    setMovements(initialMovements);
+    setCart([]);
+    showToast("Dados restaurados para o estado inicial.");
   };
 
-  const addProduct = () => {
-    const id = getNextId(products);
-    setProducts((currentProducts) => [
-      ...currentProducts,
-      { id, name: "Novo Produto", sku: `NOV-${id}`, category: "Geral", description: "Produto cadastrado na demonstração", cost: 10, price: 25, stock: 20, minStock: 5, status: "Ativo" },
-    ]);
-    showToast("Produto cadastrado com sucesso.");
+  const saveProduct = (form) => {
+    if (!form.name || !form.price || !form.stock) {
+      showToast("Preencha nome, preço de venda e estoque.");
+      return false;
+    }
+    const product = {
+      ...form,
+      id: form.id || getNextId(products),
+      sku: form.sku || `PRO-${Date.now().toString().slice(-5)}`,
+      cost: Number(form.cost) || 0,
+      price: Number(form.price) || 0,
+      stock: Number(form.stock) || 0,
+      minStock: Number(form.minStock) || 0,
+      category: form.category || "Geral",
+      description: form.description || "Sem descrição",
+      status: form.status || "Ativo",
+    };
+    setProducts((current) => form.id ? current.map((item) => item.id === form.id ? product : item) : [...current, product]);
+    showToast(form.id ? "Produto atualizado com sucesso." : "Produto cadastrado com sucesso.");
+    return true;
   };
 
   const deleteProduct = (productId) => {
     const productInCart = cart.some((item) => item.productId === productId);
     const productInSales = sales.some((sale) => sale.items.some((item) => item.productId === productId));
     if (productInCart || productInSales) {
-      setProducts((currentProducts) => currentProducts.map((product) => product.id === productId ? { ...product, status: "Inativo" } : product));
+      setProducts((current) => current.map((product) => product.id === productId ? { ...product, status: "Inativo" } : product));
       showToast("Produto vinculado a vendas foi marcado como inativo.");
       return;
     }
-    setProducts((currentProducts) => currentProducts.filter((product) => product.id !== productId));
+    setProducts((current) => current.filter((product) => product.id !== productId));
     showToast("Produto removido com sucesso.");
   };
 
-  const addCustomer = () => {
-    const id = getNextId(customers);
-    setCustomers((currentCustomers) => [
-      ...currentCustomers,
-      { id, name: "Novo Cliente", document: "", phone: "(11) 90000-0000", email: "cliente@email.com", address: "São Paulo - SP", birthday: "", notes: "Cadastro criado na demonstração", status: "Novo" },
-    ]);
-    showToast("Cliente cadastrado com sucesso.");
+  const saveCustomer = (form) => {
+    if (!form.name || !form.phone) {
+      showToast("Preencha nome e telefone do cliente.");
+      return false;
+    }
+    const customer = { ...form, id: form.id || getNextId(customers), status: form.status || "Novo" };
+    setCustomers((current) => form.id ? current.map((item) => item.id === form.id ? customer : item) : [...current, customer]);
+    showToast(form.id ? "Cliente atualizado com sucesso." : "Cliente cadastrado com sucesso.");
+    return true;
   };
 
   const deleteCustomer = (customerId) => {
     const customerHasSales = sales.some((sale) => sale.customerId === customerId);
     if (customerHasSales) {
-      setCustomers((currentCustomers) => currentCustomers.map((customer) => customer.id === customerId ? { ...customer, status: "Inativo" } : customer));
+      setCustomers((current) => current.map((customer) => customer.id === customerId ? { ...customer, status: "Inativo" } : customer));
       showToast("Cliente vinculado a vendas foi marcado como inativo.");
       return;
     }
-    setCustomers((currentCustomers) => currentCustomers.filter((customer) => customer.id !== customerId));
+    setCustomers((current) => current.filter((customer) => customer.id !== customerId));
     showToast("Cliente removido com sucesso.");
   };
 
   const addToCart = (product) => {
-    if (product.status !== "Ativo") {
-      showToast("Produto inativo não pode ser vendido.");
-      return;
-    }
-    if (product.stock <= 0) {
-      showToast("Estoque insuficiente para este produto.");
-      return;
-    }
+    if (product.status !== "Ativo") return showToast("Produto inativo não pode ser vendido.");
+    if (product.stock <= 0) return showToast("Estoque insuficiente para este produto.");
     const existing = cart.find((item) => item.productId === product.id);
-    if (existing && existing.qty + 1 > product.stock) {
-      showToast("Quantidade maior que o estoque disponível.");
-      return;
-    }
-    setCart((currentCart) => existing
-      ? currentCart.map((item) => item.productId === product.id ? { ...item, qty: item.qty + 1 } : item)
-      : [...currentCart, { productId: product.id, name: product.name, qty: 1, price: product.price }]
+    if (existing && existing.qty + 1 > product.stock) return showToast("Quantidade maior que o estoque disponível.");
+    setCart((current) => existing
+      ? current.map((item) => item.productId === product.id ? { ...item, qty: item.qty + 1 } : item)
+      : [...current, { productId: product.id, name: product.name, qty: 1, price: product.price }]
     );
   };
 
-  const removeFromCart = (productId) => {
-    setCart((currentCart) => currentCart.filter((item) => item.productId !== productId));
+  const updateCartQty = (productId, qty) => {
+    const product = products.find((item) => item.id === productId);
+    const safeQty = Math.max(1, Number(qty) || 1);
+    if (product && safeQty > product.stock) return showToast("Quantidade maior que o estoque disponível.");
+    setCart((current) => current.map((item) => item.productId === productId ? { ...item, qty: safeQty } : item));
   };
 
-  const finishSale = (payment = "PIX") => {
-    if (!cart.length) {
-      showToast("Adicione produtos ao carrinho antes de finalizar.");
-      return;
-    }
-
+  const finishSale = ({ customerId, payment, discount }) => {
+    if (!cart.length) return showToast("Adicione produtos ao carrinho antes de finalizar.");
     const hasStockError = cart.some((item) => {
       const product = products.find((currentProduct) => currentProduct.id === item.productId);
       return !product || product.status !== "Ativo" || product.stock < item.qty;
     });
+    if (hasStockError) return showToast("Existe produto inativo ou com estoque insuficiente no carrinho.");
 
-    if (hasStockError) {
-      showToast("Existe produto inativo ou com estoque insuficiente no carrinho.");
-      return;
-    }
-
+    const customer = customers.find((item) => item.id === Number(customerId));
     const id = getNextId(sales, 1001);
-    const newSale = { id, date: today, customerId: 1, customerName: "Ana Souza", payment, discount: 0, status: "Concluída", items: cart.map((item) => ({ ...item })) };
+    const newSale = {
+      id,
+      date: today,
+      customerId: customer?.id || null,
+      customerName: customer?.name || "Cliente não informado",
+      payment: payment || "PIX",
+      discount: Number(discount) || 0,
+      status: "Concluída",
+      items: cart.map((item) => ({ ...item })),
+    };
     const newMovements = cart.map((item, index) => ({ id: getNextId(movements) + index, date: today, productName: item.name, type: "Venda", qty: -item.qty, user: "Administrador" }));
-
-    setSales((currentSales) => [newSale, ...currentSales]);
-    setProducts((currentProducts) => currentProducts.map((product) => {
+    setSales((current) => [newSale, ...current]);
+    setProducts((current) => current.map((product) => {
       const sold = cart.find((item) => item.productId === product.id);
       return sold ? { ...product, stock: product.stock - sold.qty } : product;
     }));
-    setMovements((currentMovements) => [...newMovements, ...currentMovements]);
+    setMovements((current) => [...newMovements, ...current]);
     setCart([]);
     showToast("Venda finalizada e estoque atualizado automaticamente.");
   };
@@ -283,32 +319,37 @@ function App() {
   const cancelSale = (sale) => {
     if (sale.status === "Cancelada") return;
     const newMovements = sale.items.map((item, index) => ({ id: getNextId(movements) + index, date: today, productName: item.name, type: "Cancelamento", qty: item.qty, user: "Administrador" }));
-    setSales((currentSales) => currentSales.map((currentSale) => currentSale.id === sale.id ? { ...currentSale, status: "Cancelada" } : currentSale));
-    setProducts((currentProducts) => currentProducts.map((product) => {
+    setSales((current) => current.map((currentSale) => currentSale.id === sale.id ? { ...currentSale, status: "Cancelada" } : currentSale));
+    setProducts((current) => current.map((product) => {
       const item = sale.items.find((saleItem) => saleItem.productId === product.id);
       return item ? { ...product, stock: product.stock + item.qty } : product;
     }));
-    setMovements((currentMovements) => [...newMovements, ...currentMovements]);
+    setMovements((current) => [...newMovements, ...current]);
     showToast("Venda cancelada e itens devolvidos ao estoque.");
   };
 
-  const addStock = (product) => {
-    const movement = { id: getNextId(movements), date: today, productName: product.name, type: "Entrada", qty: 5, user: "Administrador" };
-    setProducts((currentProducts) => currentProducts.map((currentProduct) => currentProduct.id === product.id ? { ...currentProduct, stock: currentProduct.stock + 5 } : currentProduct));
-    setMovements((currentMovements) => [movement, ...currentMovements]);
-    showToast("Entrada de 5 unidades registrada.");
+  const addStock = (product, amount = 5) => {
+    const qty = Number(amount) || 0;
+    if (qty <= 0) return showToast("Informe uma quantidade válida.");
+    const movement = { id: getNextId(movements), date: today, productName: product.name, type: "Entrada", qty, user: "Administrador" };
+    setProducts((current) => current.map((currentProduct) => currentProduct.id === product.id ? { ...currentProduct, stock: currentProduct.stock + qty } : currentProduct));
+    setMovements((current) => [movement, ...current]);
+    showToast(`Entrada de ${qty} unidades registrada.`);
   };
 
+  const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0), [cart]);
+  const handleNavigate = (key) => { setActive(key); setSidebarOpen(false); };
+
   const renderContent = () => {
-    if (active === "dashboard") return <Dashboard totalToday={totalToday} totalMonth={totalMonth} products={products} customers={customers} lowStock={lowStock} salesByDay={salesByDay} productSales={productSales} paymentData={paymentData} />;
-    if (active === "products") return <Products products={products} addProduct={addProduct} deleteProduct={deleteProduct} />;
+    if (active === "dashboard") return <Dashboard totalToday={totalToday} totalMonth={totalMonth} products={products} customers={customers} lowStock={lowStock} salesByDay={salesByDay} productSales={productSales} paymentData={paymentData} resetData={resetData} />;
+    if (active === "products") return <Products products={products} saveProduct={saveProduct} deleteProduct={deleteProduct} />;
     if (active === "stock") return <Stock products={products} movements={movements} addStock={addStock} />;
-    if (active === "pdv") return <PDV products={products} cart={cart} addToCart={addToCart} removeFromCart={removeFromCart} finishSale={finishSale} cartTotal={cartTotal} />;
-    if (active === "customers") return <Customers customers={customers} addCustomer={addCustomer} deleteCustomer={deleteCustomer} sales={sales} />;
+    if (active === "pdv") return <PDV products={products} customers={customers} cart={cart} addToCart={addToCart} updateCartQty={updateCartQty} removeFromCart={(id) => setCart((current) => current.filter((item) => item.productId !== id))} finishSale={finishSale} cartTotal={cartTotal} />;
+    if (active === "customers") return <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} sales={sales} />;
     if (active === "crm") return <CRM customers={customers} sales={sales} />;
     if (active === "sales") return <Sales sales={sales} cancelSale={cancelSale} />;
     if (active === "reports") return <Reports sales={sales} products={products} customers={customers} productSales={productSales} paymentData={paymentData} salesByDay={salesByDay} />;
-    return <Dashboard totalToday={totalToday} totalMonth={totalMonth} products={products} customers={customers} lowStock={lowStock} salesByDay={salesByDay} productSales={productSales} paymentData={paymentData} />;
+    return null;
   };
 
   if (!logged) {
@@ -324,33 +365,22 @@ function App() {
                   <h1 className="text-2xl font-bold">Gestão Comercial Integrada</h1>
                 </div>
               </div>
-              <p className="mt-8 text-lg leading-relaxed text-slate-200">
-                Sistema web com PDV, estoque, clientes, CRM e relatórios para apoiar pequenos negócios na organização comercial.
-              </p>
+              <p className="mt-8 text-lg leading-relaxed text-slate-200">Sistema web com PDV, estoque, clientes, CRM e relatórios para apoiar pequenos negócios na organização comercial.</p>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-2xl bg-white/10 p-4">PDV funcional</div>
-              <div className="rounded-2xl bg-white/10 p-4">Estoque automático</div>
-              <div className="rounded-2xl bg-white/10 p-4">CRM simples</div>
+              <div className="rounded-2xl bg-white/10 p-4">Cadastros reais</div>
+              <div className="rounded-2xl bg-white/10 p-4">Persistência local</div>
+              <div className="rounded-2xl bg-white/10 p-4">PDV completo</div>
               <div className="rounded-2xl bg-white/10 p-4">Relatórios</div>
             </div>
           </div>
           <div className="p-10 flex flex-col justify-center">
             <h2 className="text-3xl font-bold text-slate-950">Entrar no sistema</h2>
-            <p className="mt-2 text-slate-500">Use qualquer e-mail e senha para acessar a demonstração.</p>
+            <p className="mt-2 text-slate-500">Acesso administrativo para demonstração funcional.</p>
             <div className="mt-8 space-y-4">
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">E-mail</span>
-                <input className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" defaultValue="admin@demo.com" />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Senha</span>
-                <input type="password" className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" defaultValue="123456" />
-              </label>
-              <button onClick={() => setLogged(true)} className="w-full rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 flex items-center justify-center gap-2">
-                <LogIn size={18} /> Entrar
-              </button>
-              <p className="text-center text-sm text-slate-400">Esqueci minha senha</p>
+              <Input label="E-mail" defaultValue="admin@demo.com" />
+              <Input label="Senha" type="password" defaultValue="123456" />
+              <button onClick={() => setLogged(true)} className="w-full rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 flex items-center justify-center gap-2"><LogIn size={18} /> Entrar</button>
             </div>
           </div>
         </motion.div>
@@ -371,13 +401,39 @@ function App() {
               <h2 className="font-bold text-slate-950">Painel administrativo para pequenos negócios</h2>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Badge tone="green">Administrador</Badge>
-            <Badge>Demo funcional</Badge>
-          </div>
+          <div className="flex items-center gap-3"><Badge tone="green">Administrador</Badge><Badge tone="blue">Dados salvos localmente</Badge></div>
         </div>
         {renderContent()}
       </main>
+    </div>
+  );
+}
+
+function Input({ label, value, onChange, type = "text", defaultValue, placeholder }) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <input type={type} value={value} onChange={onChange} defaultValue={defaultValue} placeholder={placeholder} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" />
+    </label>
+  );
+}
+
+function Select({ label, value, onChange, children }) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <select value={value} onChange={onChange} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 bg-white">{children}</select>
+    </label>
+  );
+}
+
+function Modal({ title, children, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+      <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-3xl rounded-3xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold text-slate-950">{title}</h2><button onClick={onClose} className="rounded-xl p-2 hover:bg-slate-100"><X size={20} /></button></div>
+        {children}
+      </motion.div>
     </div>
   );
 }
@@ -388,24 +444,11 @@ function Sidebar({ active, onNavigate, onLogout, open, onClose }) {
       {open && <button aria-label="Fechar menu" onClick={onClose} className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" />}
       <aside className={`fixed left-0 top-0 z-40 h-full w-72 bg-slate-950 text-white p-5 flex flex-col transition-transform duration-300 ${open ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}>
         <div className="flex items-center justify-between border-b border-white/10 pb-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-emerald-500 p-3"><Building2 size={22} /></div>
-            <div>
-              <p className="text-xs text-blue-100">Sistema Web</p>
-              <h2 className="font-bold leading-tight">Gestão Comercial Integrada</h2>
-            </div>
-          </div>
+          <div className="flex items-center gap-3"><div className="rounded-2xl bg-emerald-500 p-3"><Building2 size={22} /></div><div><p className="text-xs text-blue-100">Sistema Web</p><h2 className="font-bold leading-tight">Gestão Comercial Integrada</h2></div></div>
           <button onClick={onClose} className="lg:hidden rounded-xl p-2 hover:bg-white/10"><X size={18} /></button>
         </div>
         <nav className="mt-6 space-y-2 flex-1">
-          {menu.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button key={item.key} onClick={() => onNavigate(item.key)} className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${active === item.key ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/10"}`}>
-                <Icon size={18} /> {item.label}
-              </button>
-            );
-          })}
+          {menu.map((item) => { const Icon = item.icon; return <button key={item.key} onClick={() => onNavigate(item.key)} className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${active === item.key ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/10"}`}><Icon size={18} /> {item.label}</button>; })}
         </nav>
         <button onClick={onLogout} className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-300 hover:bg-white/10"><LogOut size={18} /> Sair</button>
       </aside>
@@ -413,13 +456,13 @@ function Sidebar({ active, onNavigate, onLogout, open, onClose }) {
   );
 }
 
-function Dashboard({ totalToday, totalMonth, products, customers, lowStock, salesByDay, productSales, paymentData }) {
+function Dashboard({ totalToday, totalMonth, products, customers, lowStock, salesByDay, productSales, paymentData, resetData }) {
   return (
     <div>
-      <SectionTitle title="Dashboard" subtitle="Visão geral das vendas, estoque, clientes e indicadores comerciais." />
+      <SectionTitle title="Dashboard" subtitle="Visão geral das vendas, estoque, clientes e indicadores comerciais." actions={<button onClick={resetData} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><RotateCcw size={16} /> Restaurar dados</button>} />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard title="Vendas do dia" value={currency(totalToday)} icon={Wallet} caption="Atualizado em tempo real" />
-        <StatCard title="Vendas do mês" value={currency(totalMonth)} icon={CreditCard} caption="Total demonstrativo" />
+        <StatCard title="Vendas do mês" value={currency(totalMonth)} icon={CreditCard} caption="Total de vendas concluídas" />
         <StatCard title="Produtos cadastrados" value={products.length} icon={Package} caption="Produtos ativos e inativos" />
         <StatCard title="Clientes cadastrados" value={customers.length} icon={Users} caption="Base de relacionamento" />
       </div>
@@ -428,24 +471,12 @@ function Dashboard({ totalToday, totalMonth, products, customers, lowStock, sale
         <StatCard title="Valor em estoque" value={currency(products.reduce((sum, product) => sum + product.stock * product.cost, 0))} icon={BarChart3} caption="Custo estimado" />
       </div>
       <div className="mt-6 grid gap-5 xl:grid-cols-2">
-        <ChartCard title="Vendas por dia">
-          <ResponsiveContainer width="100%" height={260}><BarChart data={salesByDay}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip formatter={(value) => currency(value)} /><Bar dataKey="total" fill="#2563eb" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer>
-        </ChartCard>
-        <ChartCard title="Produtos mais vendidos">
-          <ResponsiveContainer width="100%" height={260}><BarChart data={productSales}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis /><Tooltip /><Bar dataKey="qty" fill="#059669" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer>
-        </ChartCard>
+        <ChartCard title="Vendas por dia"><ResponsiveContainer width="100%" height={260}><BarChart data={salesByDay}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip formatter={(value) => currency(value)} /><Bar dataKey="total" fill="#2563eb" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard>
+        <ChartCard title="Produtos mais vendidos"><ResponsiveContainer width="100%" height={260}><BarChart data={productSales}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis /><Tooltip /><Bar dataKey="qty" fill="#059669" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard>
       </div>
       <div className="mt-6 grid gap-5 xl:grid-cols-2">
-        <ChartCard title="Formas de pagamento">
-          <ResponsiveContainer width="100%" height={260}><PieChart><Pie data={paymentData} dataKey="value" nameKey="name" outerRadius={90} label>{paymentData.map((entry, index) => <Cell key={entry.name} fill={chartColors[index % chartColors.length]} />)}</Pie><Tooltip formatter={(value) => currency(value)} /></PieChart></ResponsiveContainer>
-        </ChartCard>
-        <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100">
-          <h3 className="font-bold text-slate-950">Alertas de estoque</h3>
-          <div className="mt-4 space-y-3">
-            {lowStock.length === 0 && <p className="text-sm text-slate-400">Nenhum produto abaixo do estoque mínimo.</p>}
-            {lowStock.map((product) => <div key={product.id} className="flex items-center justify-between rounded-2xl bg-amber-50 p-4"><span>{product.name}</span><Badge tone="amber">{product.stock} un.</Badge></div>)}
-          </div>
-        </div>
+        <ChartCard title="Formas de pagamento"><ResponsiveContainer width="100%" height={260}><PieChart><Pie data={paymentData} dataKey="value" nameKey="name" outerRadius={90} label>{paymentData.map((entry, index) => <Cell key={entry.name} fill={chartColors[index % chartColors.length]} />)}</Pie><Tooltip formatter={(value) => currency(value)} /></PieChart></ResponsiveContainer></ChartCard>
+        <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold text-slate-950">Alertas de estoque</h3><div className="mt-4 space-y-3">{lowStock.length === 0 && <p className="text-sm text-slate-400">Nenhum produto abaixo do estoque mínimo.</p>}{lowStock.map((product) => <div key={product.id} className="flex items-center justify-between rounded-2xl bg-amber-50 p-4"><span>{product.name}</span><Badge tone="amber">{product.stock} un.</Badge></div>)}</div></div>
       </div>
     </div>
   );
@@ -455,207 +486,77 @@ function ChartCard({ title, children }) {
   return <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="mb-4 font-bold text-slate-950">{title}</h3>{children}</div>;
 }
 
-function Products({ products, addProduct, deleteProduct }) {
+function Products({ products, saveProduct, deleteProduct }) {
   const [query, setQuery] = useState("");
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState(emptyProduct);
   const filtered = products.filter((product) => `${product.name} ${product.sku} ${product.category}`.toLowerCase().includes(query.toLowerCase()));
+  const openForm = (product) => { setForm(product ? { ...product } : emptyProduct); setModal(product ? "edit" : "new"); };
+  const submit = () => { if (saveProduct(form)) setModal(null); };
   return (
     <div>
-      <SectionTitle title="Produtos" subtitle="Cadastro, edição, pesquisa e alerta de estoque mínimo." />
-      <Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar produto, SKU ou categoria..." button="Novo produto" onClick={addProduct} />
-      <DataTable headers={["Produto", "SKU", "Categoria", "Preço", "Estoque", "Status", "Ações"]}>
-        {filtered.map((product) => <tr key={product.id} className="border-t border-slate-100">
-          <td className="p-4"><b>{product.name}</b><p className="text-xs text-slate-500">{product.description}</p></td>
-          <td className="p-4">{product.sku}</td>
-          <td className="p-4">{product.category}</td>
-          <td className="p-4">{currency(product.price)}</td>
-          <td className="p-4">{product.stock <= product.minStock ? <Badge tone="amber">{product.stock} baixo</Badge> : `${product.stock} un.`}</td>
-          <td className="p-4"><Badge tone={product.status === "Ativo" ? "green" : "slate"}>{product.status}</Badge></td>
-          <td className="p-4"><button onClick={() => deleteProduct(product.id)} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button></td>
-        </tr>)}
-      </DataTable>
+      <SectionTitle title="Produtos" subtitle="Cadastro real, edição, pesquisa e alerta de estoque mínimo." />
+      <Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar produto, SKU ou categoria..." button="Novo produto" onClick={() => openForm()} />
+      <DataTable headers={["Produto", "SKU", "Categoria", "Preço", "Estoque", "Status", "Ações"]}>{filtered.map((product) => <tr key={product.id} className="border-t border-slate-100"><td className="p-4"><b>{product.name}</b><p className="text-xs text-slate-500">{product.description}</p></td><td className="p-4">{product.sku}</td><td className="p-4">{product.category}</td><td className="p-4">{currency(product.price)}</td><td className="p-4">{product.stock <= product.minStock ? <Badge tone="amber">{product.stock} baixo</Badge> : `${product.stock} un.`}</td><td className="p-4"><Badge tone={product.status === "Ativo" ? "green" : "slate"}>{product.status}</Badge></td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(product)} className="text-blue-700"><Edit3 size={18} /></button><button onClick={() => deleteProduct(product.id)} className="text-red-600"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>
+      {modal && <Modal title={modal === "edit" ? "Editar produto" : "Cadastrar produto"} onClose={() => setModal(null)}><ProductForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}
     </div>
   );
+}
+
+function ProductForm({ form, setForm, onSubmit }) {
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  return <div className="grid gap-4 md:grid-cols-2"><Input label="Nome do produto" value={form.name} onChange={(e) => update("name", e.target.value)} /><Input label="SKU/Código" value={form.sku} onChange={(e) => update("sku", e.target.value)} /><Input label="Categoria" value={form.category} onChange={(e) => update("category", e.target.value)} /><Input label="Descrição" value={form.description} onChange={(e) => update("description", e.target.value)} /><Input label="Preço de custo" type="number" value={form.cost} onChange={(e) => update("cost", e.target.value)} /><Input label="Preço de venda" type="number" value={form.price} onChange={(e) => update("price", e.target.value)} /><Input label="Estoque atual" type="number" value={form.stock} onChange={(e) => update("stock", e.target.value)} /><Input label="Estoque mínimo" type="number" value={form.minStock} onChange={(e) => update("minStock", e.target.value)} /><Select label="Status" value={form.status} onChange={(e) => update("status", e.target.value)}><option>Ativo</option><option>Inativo</option></Select><div className="md:col-span-2 flex justify-end"><button onClick={onSubmit} className="rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 flex items-center gap-2"><Save size={18} /> Salvar produto</button></div></div>;
 }
 
 function Stock({ products, movements, addStock }) {
-  return (
-    <div>
-      <SectionTitle title="Estoque" subtitle="Controle de entrada, saída, movimentações e produtos com baixo estoque." />
-      <div className="grid gap-5 xl:grid-cols-2">
-        <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100">
-          <h3 className="font-bold mb-4">Produtos em estoque</h3>
-          <div className="space-y-3">
-            {products.map((product) => <div key={product.id} className="flex flex-col gap-3 rounded-2xl border border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div><b>{product.name}</b><p className="text-xs text-slate-500">Mínimo: {product.minStock} un. • {product.status}</p></div>
-              <div className="flex items-center gap-3"><Badge tone={product.stock <= product.minStock ? "amber" : "green"}>{product.stock} un.</Badge><button onClick={() => addStock(product)} className="rounded-xl bg-blue-600 px-3 py-2 text-sm text-white">Entrada +5</button></div>
-            </div>)}
-          </div>
-        </div>
-        <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100">
-          <h3 className="font-bold mb-4">Histórico de movimentações</h3>
-          <div className="space-y-3">
-            {movements.map((movement) => <div key={movement.id} className="rounded-2xl bg-slate-50 p-4">
-              <div className="flex justify-between gap-3"><b>{movement.productName}</b><Badge tone={movement.qty < 0 ? "red" : "green"}>{movement.qty > 0 ? "+" : ""}{movement.qty}</Badge></div>
-              <p className="text-xs text-slate-500">{movement.type} • {movement.date} • {movement.user}</p>
-            </div>)}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const [amounts, setAmounts] = useState({});
+  return <div><SectionTitle title="Estoque" subtitle="Controle de entrada, movimentações e produtos com baixo estoque." /><div className="grid gap-5 xl:grid-cols-2"><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold mb-4">Produtos em estoque</h3><div className="space-y-3">{products.map((product) => <div key={product.id} className="rounded-2xl border border-slate-100 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><b>{product.name}</b><p className="text-xs text-slate-500">Mínimo: {product.minStock} un. • {product.status}</p></div><Badge tone={product.stock <= product.minStock ? "amber" : "green"}>{product.stock} un.</Badge></div><div className="mt-3 flex gap-2"><input type="number" min="1" value={amounts[product.id] || 5} onChange={(e) => setAmounts((current) => ({ ...current, [product.id]: e.target.value }))} className="w-28 rounded-xl border border-slate-200 px-3 py-2" /><button onClick={() => addStock(product, amounts[product.id] || 5)} className="rounded-xl bg-blue-600 px-3 py-2 text-sm text-white">Registrar entrada</button></div></div>)}</div></div><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold mb-4">Histórico de movimentações</h3><div className="space-y-3">{movements.map((movement) => <div key={movement.id} className="rounded-2xl bg-slate-50 p-4"><div className="flex justify-between gap-3"><b>{movement.productName}</b><Badge tone={movement.qty < 0 ? "red" : "green"}>{movement.qty > 0 ? "+" : ""}{movement.qty}</Badge></div><p className="text-xs text-slate-500">{movement.type} • {movement.date} • {movement.user}</p></div>)}</div></div></div></div>;
 }
 
-function PDV({ products, cart, addToCart, removeFromCart, finishSale, cartTotal }) {
+function PDV({ products, customers, cart, addToCart, updateCartQty, removeFromCart, finishSale, cartTotal }) {
   const [query, setQuery] = useState("");
+  const [customerId, setCustomerId] = useState(customers[0]?.id || "");
+  const [payment, setPayment] = useState("PIX");
+  const [discount, setDiscount] = useState(0);
   const filtered = products.filter((product) => product.status === "Ativo" && `${product.name} ${product.sku}`.toLowerCase().includes(query.toLowerCase()));
-  return (
-    <div>
-      <SectionTitle title="PDV / Frente de Caixa" subtitle="Registro de vendas com carrinho, pagamento e baixa automática no estoque." />
-      <div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
-        <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100">
-          <div className="relative mb-4"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar produto por nome ou SKU..." className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div>
-          <div className="grid gap-3 md:grid-cols-2">
-            {filtered.map((product) => <button key={product.id} onClick={() => addToCart(product)} className="text-left rounded-2xl border border-slate-100 p-4 hover:border-blue-300 hover:bg-blue-50">
-              <div className="flex justify-between gap-3"><b>{product.name}</b><span className="font-bold text-blue-700">{currency(product.price)}</span></div>
-              <p className="text-xs text-slate-500">SKU {product.sku} • estoque {product.stock}</p>
-            </button>)}
-          </div>
-        </div>
-        <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100">
-          <h3 className="font-bold flex items-center gap-2"><ShoppingCart size={18} /> Carrinho</h3>
-          <div className="mt-4 space-y-3 min-h-[210px]">
-            {cart.length === 0 && <p className="text-sm text-slate-400">Nenhum produto adicionado.</p>}
-            {cart.map((item) => <div key={item.productId} className="rounded-2xl bg-slate-50 p-4">
-              <div className="flex justify-between gap-3"><b>{item.name}</b><button onClick={() => removeFromCart(item.productId)} className="text-red-600"><Trash2 size={16} /></button></div>
-              <p className="text-sm text-slate-500">{item.qty} x {currency(item.price)} = {currency(item.qty * item.price)}</p>
-            </div>)}
-          </div>
-          <div className="mt-5 border-t border-slate-100 pt-5">
-            <div className="flex justify-between text-lg font-bold"><span>Total</span><span>{currency(cartTotal)}</span></div>
-            <button onClick={() => finishSale("PIX")} className="mt-4 w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Finalizar venda via PIX</button>
-            <button onClick={() => finishSale("Cartão de crédito")} className="mt-2 w-full rounded-2xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700">Finalizar no cartão</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const finalTotal = Math.max(cartTotal - (Number(discount) || 0), 0);
+  return <div><SectionTitle title="PDV / Frente de Caixa" subtitle="Venda com cliente, desconto, forma de pagamento e baixa automática no estoque." /><div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]"><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><div className="relative mb-4"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar produto por nome ou SKU..." className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div><div className="grid gap-3 md:grid-cols-2">{filtered.map((product) => <button key={product.id} onClick={() => addToCart(product)} className="text-left rounded-2xl border border-slate-100 p-4 hover:border-blue-300 hover:bg-blue-50"><div className="flex justify-between gap-3"><b>{product.name}</b><span className="font-bold text-blue-700">{currency(product.price)}</span></div><p className="text-xs text-slate-500">SKU {product.sku} • estoque {product.stock}</p></button>)}</div></div><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold flex items-center gap-2"><ShoppingCart size={18} /> Carrinho</h3><div className="mt-4 space-y-3 min-h-[170px]">{cart.length === 0 && <p className="text-sm text-slate-400">Nenhum produto adicionado.</p>}{cart.map((item) => <div key={item.productId} className="rounded-2xl bg-slate-50 p-4"><div className="flex justify-between gap-3"><b>{item.name}</b><button onClick={() => removeFromCart(item.productId)} className="text-red-600"><Trash2 size={16} /></button></div><div className="mt-2 flex items-center justify-between gap-3"><input type="number" min="1" value={item.qty} onChange={(e) => updateCartQty(item.productId, e.target.value)} className="w-20 rounded-xl border border-slate-200 px-3 py-2" /><p className="text-sm text-slate-500">{currency(item.qty * item.price)}</p></div></div>)}</div><div className="mt-5 border-t border-slate-100 pt-5 space-y-3"><Select label="Cliente" value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">Cliente não informado</option>{customers.filter((c) => c.status !== "Inativo").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select><Select label="Forma de pagamento" value={payment} onChange={(e) => setPayment(e.target.value)}><option>PIX</option><option>Dinheiro</option><option>Cartão de débito</option><option>Cartão de crédito</option><option>Outros</option></Select><Input label="Desconto" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} /><div className="flex justify-between text-sm"><span>Subtotal</span><b>{currency(cartTotal)}</b></div><div className="flex justify-between text-lg font-bold"><span>Total</span><span>{currency(finalTotal)}</span></div><button onClick={() => finishSale({ customerId, payment, discount })} className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Finalizar venda</button></div></div></div></div>;
 }
 
-function Customers({ customers, addCustomer, deleteCustomer, sales }) {
+function Customers({ customers, saveCustomer, deleteCustomer, sales }) {
   const [query, setQuery] = useState("");
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState(emptyCustomer);
   const filtered = customers.filter((customer) => `${customer.name} ${customer.phone} ${customer.email}`.toLowerCase().includes(query.toLowerCase()));
-  return (
-    <div>
-      <SectionTitle title="Clientes" subtitle="Cadastro, pesquisa e histórico de relacionamento do cliente." />
-      <Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar cliente..." button="Novo cliente" onClick={addCustomer} />
-      <DataTable headers={["Cliente", "Contato", "Endereço", "Status", "Compras", "Ações"]}>
-        {filtered.map((customer) => <tr key={customer.id} className="border-t border-slate-100">
-          <td className="p-4"><b>{customer.name}</b><p className="text-xs text-slate-500">{customer.email}</p></td>
-          <td className="p-4">{customer.phone}</td>
-          <td className="p-4">{customer.address}</td>
-          <td className="p-4"><Badge tone={customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></td>
-          <td className="p-4">{sales.filter((sale) => sale.customerId === customer.id).length}</td>
-          <td className="p-4"><button onClick={() => deleteCustomer(customer.id)} className="text-red-600"><Trash2 size={18} /></button></td>
-        </tr>)}
-      </DataTable>
-    </div>
-  );
+  const openForm = (customer) => { setForm(customer ? { ...customer } : emptyCustomer); setModal(customer ? "edit" : "new"); };
+  const submit = () => { if (saveCustomer(form)) setModal(null); };
+  return <div><SectionTitle title="Clientes" subtitle="Cadastro real, pesquisa e histórico de relacionamento do cliente." /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar cliente..." button="Novo cliente" onClick={() => openForm()} /><DataTable headers={["Cliente", "Contato", "Endereço", "Status", "Compras", "Ações"]}>{filtered.map((customer) => <tr key={customer.id} className="border-t border-slate-100"><td className="p-4"><b>{customer.name}</b><p className="text-xs text-slate-500">{customer.email}</p></td><td className="p-4">{customer.phone}</td><td className="p-4">{customer.address}</td><td className="p-4"><Badge tone={customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></td><td className="p-4">{sales.filter((sale) => sale.customerId === customer.id).length}</td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(customer)} className="text-blue-700"><Edit3 size={18} /></button><button onClick={() => deleteCustomer(customer.id)} className="text-red-600"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={modal === "edit" ? "Editar cliente" : "Cadastrar cliente"} onClose={() => setModal(null)}><CustomerForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
+}
+
+function CustomerForm({ form, setForm, onSubmit }) {
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  return <div className="grid gap-4 md:grid-cols-2"><Input label="Nome completo" value={form.name} onChange={(e) => update("name", e.target.value)} /><Input label="CPF/CNPJ" value={form.document} onChange={(e) => update("document", e.target.value)} /><Input label="Telefone" value={form.phone} onChange={(e) => update("phone", e.target.value)} /><Input label="E-mail" value={form.email} onChange={(e) => update("email", e.target.value)} /><Input label="Endereço" value={form.address} onChange={(e) => update("address", e.target.value)} /><Input label="Data de nascimento" type="date" value={form.birthday} onChange={(e) => update("birthday", e.target.value)} /><Select label="Status" value={form.status} onChange={(e) => update("status", e.target.value)}><option>Novo</option><option>Ativo</option><option>Recorrente</option><option>Inativo</option></Select><Input label="Observações" value={form.notes} onChange={(e) => update("notes", e.target.value)} /><div className="md:col-span-2 flex justify-end"><button onClick={onSubmit} className="rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 flex items-center gap-2"><Save size={18} /> Salvar cliente</button></div></div>;
 }
 
 function CRM({ customers, sales }) {
-  return (
-    <div>
-      <SectionTitle title="CRM" subtitle="Análise simples do relacionamento, frequência e oportunidades com clientes." />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {customers.map((customer) => {
-          const customerSales = sales.filter((sale) => sale.customerId === customer.id && sale.status === "Concluída");
-          const total = customerSales.reduce((sum, sale) => sum + getSaleTotal(sale), 0);
-          return (
-            <div key={customer.id} className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100">
-              <div className="flex items-start justify-between gap-3">
-                <div><h3 className="font-bold">{customer.name}</h3><p className="text-sm text-slate-500">{customer.phone}</p></div>
-                <Badge tone={customer.status === "Recorrente" ? "green" : customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge>
-              </div>
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Compras</p><b>{customerSales.length}</b></div>
-                <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Total</p><b>{currency(total)}</b></div>
-              </div>
-              <p className="mt-4 text-sm text-slate-500">{customer.notes}</p>
-              {customerSales.length === 0 ? <p className="mt-3 text-sm text-amber-600">Oportunidade: cliente sem compra recente.</p> : <p className="mt-3 text-sm text-emerald-600">Cliente com histórico de compra.</p>}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return <div><SectionTitle title="CRM" subtitle="Análise simples do relacionamento, frequência e oportunidades com clientes." /><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{customers.map((customer) => { const customerSales = sales.filter((sale) => sale.customerId === customer.id && sale.status === "Concluída"); const total = customerSales.reduce((sum, sale) => sum + getSaleTotal(sale), 0); return <div key={customer.id} className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold">{customer.name}</h3><p className="text-sm text-slate-500">{customer.phone}</p></div><Badge tone={customer.status === "Recorrente" ? "green" : customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></div><div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Compras</p><b>{customerSales.length}</b></div><div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Total</p><b>{currency(total)}</b></div></div><p className="mt-4 text-sm text-slate-500">{customer.notes || "Sem observações."}</p>{customerSales.length === 0 ? <p className="mt-3 text-sm text-amber-600">Oportunidade: cliente sem compra recente.</p> : <p className="mt-3 text-sm text-emerald-600">Cliente com histórico de compra.</p>}</div>; })}</div></div>;
 }
 
 function Sales({ sales, cancelSale }) {
-  return (
-    <div>
-      <SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas, detalhes, pagamento e cancelamento com devolução ao estoque." />
-      <DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Total", "Status", "Ações"]}>
-        {sales.map((sale) => <tr key={sale.id} className="border-t border-slate-100">
-          <td className="p-4 font-bold">#{sale.id}</td>
-          <td className="p-4">{sale.date}</td>
-          <td className="p-4">{sale.customerName || "Não informado"}</td>
-          <td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td>
-          <td className="p-4">{sale.payment}</td>
-          <td className="p-4 font-bold">{currency(getSaleTotal(sale))}</td>
-          <td className="p-4"><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{sale.status}</Badge></td>
-          <td className="p-4"><button disabled={sale.status === "Cancelada"} onClick={() => cancelSale(sale)} className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 disabled:opacity-40">Cancelar</button></td>
-        </tr>)}
-      </DataTable>
-    </div>
-  );
+  return <div><SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas, detalhes, pagamento e cancelamento com devolução ao estoque." /><DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Desconto", "Total", "Status", "Ações"]}>{sales.map((sale) => <tr key={sale.id} className="border-t border-slate-100"><td className="p-4 font-bold">#{sale.id}</td><td className="p-4">{sale.date}</td><td className="p-4">{sale.customerName || "Não informado"}</td><td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td><td className="p-4">{sale.payment}</td><td className="p-4">{currency(sale.discount)}</td><td className="p-4 font-bold">{currency(getSaleTotal(sale))}</td><td className="p-4"><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{sale.status}</Badge></td><td className="p-4"><button disabled={sale.status === "Cancelada"} onClick={() => cancelSale(sale)} className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 disabled:opacity-40">Cancelar</button></td></tr>)}</DataTable></div>;
 }
 
 function Reports({ sales, products, customers, productSales, paymentData, salesByDay }) {
   const total = sales.filter((sale) => sale.status === "Concluída").reduce((sum, sale) => sum + getSaleTotal(sale), 0);
-  return (
-    <div>
-      <SectionTitle title="Relatórios" subtitle="Indicadores gerenciais para apoio à tomada de decisão." />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Receita total" value={currency(total)} icon={Wallet} />
-        <StatCard title="Vendas concluídas" value={sales.filter((sale) => sale.status === "Concluída").length} icon={Receipt} />
-        <StatCard title="Clientes" value={customers.length} icon={Users} />
-        <StatCard title="Produtos baixo estoque" value={products.filter((product) => product.stock <= product.minStock).length} icon={Boxes} />
-      </div>
-      <div className="mt-6 grid gap-5 xl:grid-cols-2">
-        <ChartCard title="Vendas por período"><ResponsiveContainer width="100%" height={270}><BarChart data={salesByDay}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip formatter={(value) => currency(value)} /><Bar dataKey="total" fill="#2563eb" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard>
-        <ChartCard title="Produtos mais vendidos"><ResponsiveContainer width="100%" height={270}><BarChart data={productSales}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis /><Tooltip /><Bar dataKey="qty" fill="#059669" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard>
-      </div>
-      <div className="mt-6 rounded-3xl bg-white p-6 shadow-sm border border-slate-100">
-        <h3 className="font-bold mb-4">Vendas por forma de pagamento</h3>
-        <div className="grid gap-3 md:grid-cols-3">
-          {paymentData.map((payment) => <div key={payment.name} className="rounded-2xl bg-slate-50 p-4"><p className="text-sm text-slate-500">{payment.name}</p><b>{currency(payment.value)}</b></div>)}
-          {paymentData.length === 0 && <p className="text-sm text-slate-400">Nenhuma venda concluída no período demonstrativo.</p>}
-        </div>
-      </div>
-    </div>
-  );
+  return <div><SectionTitle title="Relatórios" subtitle="Indicadores gerenciais para apoio à tomada de decisão." /><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><StatCard title="Receita total" value={currency(total)} icon={Wallet} /><StatCard title="Vendas concluídas" value={sales.filter((sale) => sale.status === "Concluída").length} icon={Receipt} /><StatCard title="Clientes" value={customers.length} icon={Users} /><StatCard title="Produtos baixo estoque" value={products.filter((product) => product.stock <= product.minStock).length} icon={Boxes} /></div><div className="mt-6 grid gap-5 xl:grid-cols-2"><ChartCard title="Vendas por período"><ResponsiveContainer width="100%" height={270}><BarChart data={salesByDay}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip formatter={(value) => currency(value)} /><Bar dataKey="total" fill="#2563eb" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard><ChartCard title="Produtos mais vendidos"><ResponsiveContainer width="100%" height={270}><BarChart data={productSales}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis /><Tooltip /><Bar dataKey="qty" fill="#059669" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard></div><div className="mt-6 rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold mb-4">Vendas por forma de pagamento</h3><div className="grid gap-3 md:grid-cols-3">{paymentData.map((payment) => <div key={payment.name} className="rounded-2xl bg-slate-50 p-4"><p className="text-sm text-slate-500">{payment.name}</p><b>{currency(payment.value)}</b></div>)}{paymentData.length === 0 && <p className="text-sm text-slate-400">Nenhuma venda concluída no período demonstrativo.</p>}</div></div></div>;
 }
 
 function Toolbar({ query, setQuery, placeholder, button, onClick }) {
-  return (
-    <div className="mb-5 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-      <div className="relative flex-1"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div>
-      <button onClick={onClick} className="rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 flex items-center justify-center gap-2"><Plus size={18} /> {button}</button>
-    </div>
-  );
+  return <div className="mb-5 flex flex-col md:flex-row gap-3 md:items-center md:justify-between"><div className="relative flex-1"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div><button onClick={onClick} className="rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 flex items-center justify-center gap-2"><Plus size={18} /> {button}</button></div>;
 }
 
 function DataTable({ headers, children }) {
-  return (
-    <div className="overflow-hidden rounded-3xl bg-white shadow-sm border border-slate-100">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-slate-500"><tr>{headers.map((header) => <th key={header} className="p-4 font-semibold whitespace-nowrap">{header}</th>)}</tr></thead>
-          <tbody>{children}</tbody>
-        </table>
-      </div>
-    </div>
-  );
+  return <div className="overflow-hidden rounded-3xl bg-white shadow-sm border border-slate-100"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr>{headers.map((header) => <th key={header} className="p-4 font-semibold whitespace-nowrap">{header}</th>)}</tr></thead><tbody>{children}</tbody></table></div></div>;
 }
 
 export default App;
