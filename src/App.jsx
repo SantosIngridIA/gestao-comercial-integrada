@@ -558,7 +558,30 @@ function CRM({ customers, sales }) {
 }
 
 function Sales({ sales, cancelSale }) {
-  return <div><SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas, detalhes, pagamento e cancelamento com devolução ao estoque." /><DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Recebido", "Troco", "Desconto", "Total", "Status", "Ações"]}>{sales.map((sale) => <tr key={sale.id} className="border-t border-slate-100"><td className="p-4 font-bold">#{sale.id}</td><td className="p-4">{sale.date}</td><td className="p-4">{sale.customerName || "Não informado"}</td><td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td><td className="p-4">{sale.payment}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.amountPaid) : "—"}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.change) : "—"}</td><td className="p-4">{currency</div>;
+  return (
+    <div>
+      <SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas, detalhes, pagamento e cancelamento com devolução ao estoque." />
+      <DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Recebido", "Troco", "Desconto", "Total", "Status", "Ações"]}>
+        {sales.map((sale) => (
+          <tr key={sale.id} className="border-t border-slate-100">
+            <td className="p-4 font-bold">#{sale.id}</td>
+            <td className="p-4">{sale.date}</td>
+            <td className="p-4">{sale.customerName || "Não informado"}</td>
+            <td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td>
+            <td className="p-4">{sale.payment}</td>
+            <td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.amountPaid) : "—"}</td>
+            <td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.change) : "—"}</td>
+            <td className="p-4">{currency(sale.discount)}</td>
+            <td className="p-4 font-bold">{currency(getSaleTotal(sale))}</td>
+            <td className="p-4"><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{sale.status}</Badge></td>
+            <td className="p-4">
+              <button disabled={sale.status === "Cancelada"} onClick={() => cancelSale(sale)} className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 disabled:opacity-40">Cancelar</button>
+            </td>
+          </tr>
+        ))}
+      </DataTable>
+    </div>
+  );
 }
 
 function Reports({ sales, products, customers, productSales, paymentData, salesByDay }) {
