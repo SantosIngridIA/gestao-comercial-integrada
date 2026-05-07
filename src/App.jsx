@@ -285,7 +285,7 @@ function App() {
     setCart((current) => current.map((item) => item.productId === productId ? { ...item, qty: safeQty } : item));
   };
 
-  const finishSale = ({ customerId, payment, discount }) => {
+  const finishSale = ({ customerId, payment, discount, amountPaid, change }) => {
     if (!cart.length) return showToast("Adicione produtos ao carrinho antes de finalizar.");
     const hasStockError = cart.some((item) => {
       const product = products.find((currentProduct) => currentProduct.id === item.productId);
@@ -295,6 +295,15 @@ function App() {
 
     const customer = customers.find((item) => item.id === Number(customerId));
     const id = getNextId(sales, 1001);
+    const subtotal = cart.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0);
+    const finalTotal = Math.max(subtotal - (Number(discount) || 0), 0);
+    const paidValue = Number(amountPaid) || 0;
+
+    if (payment === "Dinheiro" && paidValue < finalTotal) {
+      showToast("Valor recebido em dinheiro é menor que o total da venda.");
+      return;
+    }
+
     const newSale = {
       id,
       date: today,
@@ -302,9 +311,11 @@ function App() {
       customerName: customer?.name || "Cliente não informado",
       payment: payment || "PIX",
       discount: Number(discount) || 0,
+      amountPaid: payment === "Dinheiro" ? paidValue : finalTotal,
+      change: payment === "Dinheiro" ? Math.max(Number(change) || 0, 0) : 0,
       status: "Concluída",
       items: cart.map((item) => ({ ...item })),
-    };
+    }; 
     const newMovements = cart.map((item, index) => ({ id: getNextId(movements) + index, date: today, productName: item.name, type: "Venda", qty: -item.qty, user: "Administrador" }));
     setSales((current) => [newSale, ...current]);
     setProducts((current) => current.map((product) => {
@@ -518,9 +529,13 @@ function PDV({ products, customers, cart, addToCart, updateCartQty, removeFromCa
   const [customerId, setCustomerId] = useState(customers[0]?.id || "");
   const [payment, setPayment] = useState("PIX");
   const [discount, setDiscount] = useState(0);
+  const [amountPaid, setAmountPaid] = useState(0);
   const filtered = products.filter((product) => product.status === "Ativo" && `${product.name} ${product.sku}`.toLowerCase().includes(query.toLowerCase()));
   const finalTotal = Math.max(cartTotal - (Number(discount) || 0), 0);
-  return <div><SectionTitle title="PDV / Frente de Caixa" subtitle="Venda com cliente, desconto, forma de pagamento e baixa automática no estoque." /><div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]"><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><div className="relative mb-4"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar produto por nome ou SKU..." className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div><div className="grid gap-3 md:grid-cols-2">{filtered.map((product) => <button key={product.id} onClick={() => addToCart(product)} className="text-left rounded-2xl border border-slate-100 p-4 hover:border-blue-300 hover:bg-blue-50"><div className="flex justify-between gap-3"><b>{product.name}</b><span className="font-bold text-blue-700">{currency(product.price)}</span></div><p className="text-xs text-slate-500">SKU {product.sku} • estoque {product.stock}</p></button>)}</div></div><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold flex items-center gap-2"><ShoppingCart size={18} /> Carrinho</h3><div className="mt-4 space-y-3 min-h-[170px]">{cart.length === 0 && <p className="text-sm text-slate-400">Nenhum produto adicionado.</p>}{cart.map((item) => <div key={item.productId} className="rounded-2xl bg-slate-50 p-4"><div className="flex justify-between gap-3"><b>{item.name}</b><button onClick={() => removeFromCart(item.productId)} className="text-red-600"><Trash2 size={16} /></button></div><div className="mt-2 flex items-center justify-between gap-3"><input type="number" min="1" value={item.qty} onChange={(e) => updateCartQty(item.productId, e.target.value)} className="w-20 rounded-xl border border-slate-200 px-3 py-2" /><p className="text-sm text-slate-500">{currency(item.qty * item.price)}</p></div></div>)}</div><div className="mt-5 border-t border-slate-100 pt-5 space-y-3"><Select label="Cliente" value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">Cliente não informado</option>{customers.filter((c) => c.status !== "Inativo").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select><Select label="Forma de pagamento" value={payment} onChange={(e) => setPayment(e.target.value)}><option>PIX</option><option>Dinheiro</option><option>Cartão de débito</option><option>Cartão de crédito</option><option>Outros</option></Select><Input label="Desconto" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} /><div className="flex justify-between text-sm"><span>Subtotal</span><b>{currency(cartTotal)}</b></div><div className="flex justify-between text-lg font-bold"><span>Total</span><span>{currency(finalTotal)}</span></div><button onClick={() => finishSale({ customerId, payment, discount })} className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Finalizar venda</button></div></div></div></div>;
+  const change = payment === "Dinheiro" ? Math.max((Number(amountPaid) || 0) - finalTotal, 0) : 0;
+  const insufficientCash = payment === "Dinheiro" && cart.length > 0 && (Number(amountPaid) || 0) < finalTotal;
+
+  return <div><SectionTitle title="PDV / Frente de Caixa" subtitle="Venda com cliente, desconto, forma de pagamento, dinheiro e cálculo automático de troco." /><div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]"><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><div className="relative mb-4"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar produto por nome ou SKU..." className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div><div className="grid gap-3 md:grid-cols-2">{filtered.map((product) => <button key={product.id} onClick={() => addToCart(product)} className="text-left rounded-2xl border border-slate-100 p-4 hover:border-blue-300 hover:bg-blue-50"><div className="flex justify-between gap-3"><b>{product.name}</b><span className="font-bold text-blue-700">{currency(product.price)}</span></div><p className="text-xs text-slate-500">SKU {product.sku} • estoque {product.stock}</p></button>)}</div></div><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold flex items-center gap-2"><ShoppingCart size={18} /> Carrinho</h3><div className="mt-4 space-y-3 min-h-[170px]">{cart.length === 0 && <p className="text-sm text-slate-400">Nenhum produto adicionado.</p>}{cart.map((item) => <div key={item.productId} className="rounded-2xl bg-slate-50 p-4"><div className="flex justify-between gap-3"><b>{item.name}</b><button onClick={() => removeFromCart(item.productId)} className="text-red-600"><Trash2 size={16} /></button></div><div className="mt-2 flex items-center justify-between gap-3"><input type="number" min="1" value={item.qty} onChange={(e) => updateCartQty(item.productId, e.target.value)} className="w-20 rounded-xl border border-slate-200 px-3 py-2" /><p className="text-sm text-slate-500">{currency(item.qty * item.price)}</p></div></div>)}</div><div className="mt-5 border-t border-slate-100 pt-5 space-y-3"><Select label="Cliente" value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">Cliente não informado</option>{customers.filter((c) => c.status !== "Inativo").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select><Select label="Forma de pagamento" value={payment} onChange={(e) => setPayment(e.target.value)}><option>PIX</option><option>Dinheiro</option><option>Cartão de débito</option><option>Cartão de crédito</option><option>Outros</option></Select><Input label="Desconto" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} />{payment === "Dinheiro" && <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 space-y-3"><Input label="Valor recebido em dinheiro" type="number" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} /><div className="flex justify-between text-sm"><span>Valor recebido</span><b>{currency(amountPaid)}</b></div><div className="flex justify-between text-sm"><span>Troco</span><b className="text-emerald-700">{currency(change)}</b></div>{insufficientCash && <p className="text-sm font-medium text-red-600">Valor recebido menor que o total da venda.</p>}</div>}<div className="flex justify-between text-sm"><span>Subtotal</span><b>{currency(cartTotal)}</b></div><div className="flex justify-between text-sm"><span>Desconto</span><b>{currency(discount)}</b></div><div className="flex justify-between text-lg font-bold"><span>Total</span><span>{currency(finalTotal)}</span></div><button onClick={() => finishSale({ customerId, payment, discount, amountPaid, change })} disabled={insufficientCash} className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Finalizar venda</button></div></div></div></div>;
 }
 
 function Customers({ customers, saveCustomer, deleteCustomer, sales }) {
@@ -543,7 +558,7 @@ function CRM({ customers, sales }) {
 }
 
 function Sales({ sales, cancelSale }) {
-  return <div><SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas, detalhes, pagamento e cancelamento com devolução ao estoque." /><DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Desconto", "Total", "Status", "Ações"]}>{sales.map((sale) => <tr key={sale.id} className="border-t border-slate-100"><td className="p-4 font-bold">#{sale.id}</td><td className="p-4">{sale.date}</td><td className="p-4">{sale.customerName || "Não informado"}</td><td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td><td className="p-4">{sale.payment}</td><td className="p-4">{currency(sale.discount)}</td><td className="p-4 font-bold">{currency(getSaleTotal(sale))}</td><td className="p-4"><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{sale.status}</Badge></td><td className="p-4"><button disabled={sale.status === "Cancelada"} onClick={() => cancelSale(sale)} className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 disabled:opacity-40">Cancelar</button></td></tr>)}</DataTable></div>;
+  return <div><SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas, detalhes, pagamento e cancelamento com devolução ao estoque." /><DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Recebido", "Troco", "Desconto", "Total", "Status", "Ações"]}>{sales.map((sale) => <tr key={sale.id} className="border-t border-slate-100"><td className="p-4 font-bold">#{sale.id}</td><td className="p-4">{sale.date}</td><td className="p-4">{sale.customerName || "Não informado"}</td><td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td><td className="p-4">{sale.payment}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.amountPaid) : "—"}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.change) : "—"}</td><td className="p-4">{currency</div>;
 }
 
 function Reports({ sales, products, customers, productSales, paymentData, salesByDay }) {
