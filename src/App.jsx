@@ -24,6 +24,8 @@ import {
   Wallet,
   X,
 } from "lucide-react";
+import { supabase } from "./supabaseClient";
+
 import {
   Bar,
   BarChart,
@@ -108,6 +110,62 @@ function readStorage() {
   }
 }
 
+function produtoDoBanco(produto) {
+  return {
+    id: produto.id,
+    name: produto.nome,
+    sku: produto.sku || "",
+    category: produto.categoria || "Geral",
+    description: produto.descricao || "Sem descrição",
+    cost: Number(produto.preco_custo) || 0,
+    price: Number(produto.preco_venda) || 0,
+    stock: Number(produto.estoque) || 0,
+    minStock: Number(produto.estoque_minimo) || 0,
+    status: produto.status || "Ativo",
+  };
+}
+
+function produtoParaBanco(produto) {
+  return {
+    nome: produto.name,
+    sku: produto.sku,
+    categoria: produto.category,
+    descricao: produto.description,
+    preco_custo: Number(produto.cost) || 0,
+    preco_venda: Number(produto.price) || 0,
+    estoque: Number(produto.stock) || 0,
+    estoque_minimo: Number(produto.minStock) || 0,
+    status: produto.status || "Ativo",
+  };
+}
+
+function clienteDoBanco(cliente) {
+  return {
+    id: cliente.id,
+    name: cliente.nome,
+    document: cliente.documento || "",
+    phone: cliente.telefone || "",
+    email: cliente.email || "",
+    address: cliente.endereco || "",
+    birthday: cliente.data_nascimento || "",
+    notes: cliente.observacoes || "",
+    status: cliente.status || "Novo",
+  };
+}
+
+function clienteParaBanco(cliente) {
+  return {
+    nome: cliente.name,
+    documento: cliente.document,
+    telefone: cliente.phone,
+    email: cliente.email,
+    endereco: cliente.address,
+    data_nascimento: cliente.birthday || null,
+    observacoes: cliente.notes,
+    status: cliente.status || "Novo",
+  };
+}
+
 function StatCard({ title, value, icon: Icon, caption }) {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100">
@@ -160,10 +218,35 @@ function App() {
   const [movements, setMovements] = useState(saved?.movements || initialMovements);
   const [cart, setCart] = useState([]);
   const [toast, setToast] = useState("");
+  const [usingDatabase, setUsingDatabase] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify({ products, customers, sales, movements }));
   }, [products, customers, sales, movements]);
+
+  useEffect(() => {
+    async function carregarDadosDoBanco() {
+      try {
+        const [produtosResposta, clientesResposta] = await Promise.all([
+          supabase.from("produtos").select("*").order("id", { ascending: true }),
+          supabase.from("clientes").select("*").order("id", { ascending: true }),
+        ]);
+
+        if (produtosResposta.error) throw produtosResposta.error;
+        if (clientesResposta.error) throw clientesResposta.error;
+
+        if (produtosResposta.data?.length) setProducts(produtosResposta.data.map(produtoDoBanco));
+        if (clientesResposta.data?.length) setCustomers(clientesResposta.data.map(clienteDoBanco));
+        setUsingDatabase(true);
+        showToast("Produtos e clientes carregados do banco Supabase.");
+      } catch (error) {
+        setUsingDatabase(false);
+        showToast("Banco não conectado. Usando dados locais do navegador.");
+      }
+    }
+
+    carregarDadosDoBanco();
+  }, []);
 
   const showToast = (message) => {
     setToast(message);
@@ -211,11 +294,12 @@ function App() {
     showToast("Dados restaurados para o estado inicial.");
   };
 
-  const saveProduct = (form) => {
+  const saveProduct = async (form) => {
     if (!form.name || !form.price || !form.stock) {
       showToast("Preencha nome, preço de venda e estoque.");
       return false;
     }
+
     const product = {
       ...form,
       id: form.id || getNextId(products),
@@ -228,43 +312,125 @@ function App() {
       description: form.description || "Sem descrição",
       status: form.status || "Ativo",
     };
-    setProducts((current) => form.id ? current.map((item) => item.id === form.id ? product : item) : [...current, product]);
-    showToast(form.id ? "Produto atualizado com sucesso." : "Produto cadastrado com sucesso.");
-    return true;
+
+    try {
+      if (usingDatabase) {
+        if (form.id) {
+          const { data, error } = await supabase.from("produtos").update(produtoParaBanco(product)).eq("id", form.id).select().single();
+          if (error) throw error;
+          const updatedProduct = produtoDoBanco(data);
+          setProducts((current) => current.map((item) => item.id === form.id ? updatedProduct : item));
+        } else {
+          const { data, error } = await supabase.from("produtos").insert(produtoParaBanco(product)).select().single();
+          if (error) throw error;
+          setProducts((current) => [...current, produtoDoBanco(data)]);
+        }
+      } else {
+        setProducts((current) => form.id ? current.map((item) => item.id === form.id ? product : item) : [...current, product]);
+      }
+
+      showToast(form.id ? "Produto atualizado com sucesso." : "Produto cadastrado com sucesso.");
+      return true;
+    } catch (error) {
+      showToast("Não foi possível salvar o produto no banco.");
+      return false;
+    }
   };
 
-  const deleteProduct = (productId) => {
+  const deleteProduct = async (productId) => {
     const productInCart = cart.some((item) => item.productId === productId);
     const productInSales = sales.some((sale) => sale.items.some((item) => item.productId === productId));
-    if (productInCart || productInSales) {
-      setProducts((current) => current.map((product) => product.id === productId ? { ...product, status: "Inativo" } : product));
-      showToast("Produto vinculado a vendas foi marcado como inativo.");
-      return;
+    const markInactive = productInCart || productInSales;
+
+    try {
+      if (usingDatabase) {
+        if (markInactive) {
+          const { error } = await supabase.from("produtos").update({ status: "Inativo" }).eq("id", productId);
+          if (error) throw error;
+          setProducts((current) => current.map((product) => product.id === productId ? { ...product, status: "Inativo" } : product));
+          showToast("Produto vinculado a vendas foi marcado como inativo.");
+        } else {
+          const { error } = await supabase.from("produtos").delete().eq("id", productId);
+          if (error) throw error;
+          setProducts((current) => current.filter((product) => product.id !== productId));
+          showToast("Produto removido com sucesso.");
+        }
+        return;
+      }
+
+      if (markInactive) {
+        setProducts((current) => current.map((product) => product.id === productId ? { ...product, status: "Inativo" } : product));
+        showToast("Produto vinculado a vendas foi marcado como inativo.");
+        return;
+      }
+      setProducts((current) => current.filter((product) => product.id !== productId));
+      showToast("Produto removido com sucesso.");
+    } catch (error) {
+      showToast("Não foi possível alterar o produto no banco.");
     }
-    setProducts((current) => current.filter((product) => product.id !== productId));
-    showToast("Produto removido com sucesso.");
   };
 
-  const saveCustomer = (form) => {
+  const saveCustomer = async (form) => {
     if (!form.name || !form.phone) {
       showToast("Preencha nome e telefone do cliente.");
       return false;
     }
+
     const customer = { ...form, id: form.id || getNextId(customers), status: form.status || "Novo" };
-    setCustomers((current) => form.id ? current.map((item) => item.id === form.id ? customer : item) : [...current, customer]);
-    showToast(form.id ? "Cliente atualizado com sucesso." : "Cliente cadastrado com sucesso.");
-    return true;
+
+    try {
+      if (usingDatabase) {
+        if (form.id) {
+          const { data, error } = await supabase.from("clientes").update(clienteParaBanco(customer)).eq("id", form.id).select().single();
+          if (error) throw error;
+          const updatedCustomer = clienteDoBanco(data);
+          setCustomers((current) => current.map((item) => item.id === form.id ? updatedCustomer : item));
+        } else {
+          const { data, error } = await supabase.from("clientes").insert(clienteParaBanco(customer)).select().single();
+          if (error) throw error;
+          setCustomers((current) => [...current, clienteDoBanco(data)]);
+        }
+      } else {
+        setCustomers((current) => form.id ? current.map((item) => item.id === form.id ? customer : item) : [...current, customer]);
+      }
+
+      showToast(form.id ? "Cliente atualizado com sucesso." : "Cliente cadastrado com sucesso.");
+      return true;
+    } catch (error) {
+      showToast("Não foi possível salvar o cliente no banco.");
+      return false;
+    }
   };
 
-  const deleteCustomer = (customerId) => {
+  const deleteCustomer = async (customerId) => {
     const customerHasSales = sales.some((sale) => sale.customerId === customerId);
-    if (customerHasSales) {
-      setCustomers((current) => current.map((customer) => customer.id === customerId ? { ...customer, status: "Inativo" } : customer));
-      showToast("Cliente vinculado a vendas foi marcado como inativo.");
-      return;
+
+    try {
+      if (usingDatabase) {
+        if (customerHasSales) {
+          const { error } = await supabase.from("clientes").update({ status: "Inativo" }).eq("id", customerId);
+          if (error) throw error;
+          setCustomers((current) => current.map((customer) => customer.id === customerId ? { ...customer, status: "Inativo" } : customer));
+          showToast("Cliente vinculado a vendas foi marcado como inativo.");
+        } else {
+          const { error } = await supabase.from("clientes").delete().eq("id", customerId);
+          if (error) throw error;
+          setCustomers((current) => current.filter((customer) => customer.id !== customerId));
+          showToast("Cliente removido com sucesso.");
+        }
+        return;
+      }
+
+      if (customerHasSales) {
+        setCustomers((current) => current.map((customer) => customer.id === customerId ? { ...customer, status: "Inativo" } : customer));
+        showToast("Cliente vinculado a vendas foi marcado como inativo.");
+        return;
+      }
+      setCustomers((current) => current.filter((customer) => customer.id !== customerId));
+      showToast("Cliente removido com sucesso.");
+    } catch (error) {
+      showToast("Não foi possível alterar o cliente no banco.");
     }
-    setCustomers((current) => current.filter((customer) => customer.id !== customerId));
-    showToast("Cliente removido com sucesso.");
   };
 
   const addToCart = (product) => {
@@ -412,7 +578,7 @@ function App() {
               <h2 className="font-bold text-slate-950">Painel administrativo para pequenos negócios</h2>
             </div>
           </div>
-          <div className="flex items-center gap-3"><Badge tone="green">Administrador</Badge><Badge tone="blue">Dados salvos localmente</Badge></div>
+          <div className="flex items-center gap-3"><Badge tone="green">Administrador</Badge><Badge tone={usingDatabase ? "green" : "blue"}>{usingDatabase ? "Banco Supabase conectado" : "Dados salvos localmente"}</Badge></div>
         </div>
         {renderContent()}
       </main>

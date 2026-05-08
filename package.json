@@ -9,18 +9,19 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.105.3",
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "react": "latest",
-    "react-dom": "latest",
     "framer-motion": "latest",
     "lucide-react": "latest",
-    "recharts": "latest"
+    "react": "latest",
+    "react-dom": "latest",
+    "recharts": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
-    "tailwindcss": "^3.4.17",
-    "postcss": "^8.4.49",
     "autoprefixer": "^10.4.20",
-    "gh-pages": "latest"
+    "gh-pages": "latest",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17"
   }
 }
