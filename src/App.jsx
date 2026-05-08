@@ -16,6 +16,7 @@ import {
   Package,
   Plus,
   Receipt,
+  Printer,
   RotateCcw,
   Save,
   Search,
@@ -237,6 +238,7 @@ function App() {
   const [cart, setCart] = useState([]);
   const [toast, setToast] = useState("");
   const [usingDatabase, setUsingDatabase] = useState(false);
+  const [lastReceipt, setLastReceipt] = useState(null);
 
   const showToast = (message) => {
     setToast(message);
@@ -496,6 +498,7 @@ function App() {
     }));
     setMovements((current) => [...newMovements, ...current]);
     setCart([]);
+    setLastReceipt(newSale);
     showToast("Venda finalizada e estoque atualizado automaticamente.");
   };
 
@@ -616,6 +619,7 @@ function App() {
           </div>
         </div>
         {renderContent()}
+        {lastReceipt && <ReceiptModal sale={lastReceipt} onClose={() => setLastReceipt(null)} />}
       </main>
     </div>
   );
@@ -832,7 +836,96 @@ function CRM({ customers, sales }) {
 }
 
 function Sales({ sales, cancelSale }) {
-  return <div><SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas, detalhes, pagamento e cancelamento com devolução ao estoque." /><DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Recebido", "Troco", "Desconto", "Total", "Status", "Ações"]}>{sales.map((sale) => <tr key={sale.id} className="border-t border-slate-100"><td className="p-4 font-bold">#{sale.id}</td><td className="p-4">{sale.date}</td><td className="p-4">{sale.customerName || "Não informado"}</td><td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td><td className="p-4">{sale.payment}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.amountPaid) : "—"}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.change) : "—"}</td><td className="p-4">{currency(sale.discount)}</td><td className="p-4 font-bold">{currency(getSaleTotal(sale))}</td><td className="p-4"><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{sale.status}</Badge></td><td className="p-4"><button disabled={sale.status === "Cancelada"} onClick={() => cancelSale(sale)} className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 disabled:opacity-40">Cancelar</button></td></tr>)}</DataTable></div>;
+  const [selectedSale, setSelectedSale] = useState(null);
+
+  return <div><SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas, detalhes, pagamento e cancelamento com devolução ao estoque." /><DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Recebido", "Troco", "Desconto", "Total", "Status", "Ações"]}>{sales.map((sale) => <tr key={sale.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4 font-bold">#{sale.id}</td><td className="p-4">{sale.date}</td><td className="p-4">{sale.customerName || "Não informado"}</td><td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td><td className="p-4">{sale.payment}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.amountPaid) : "—"}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.change) : "—"}</td><td className="p-4">{currency(sale.discount)}</td><td className="p-4 font-bold">{currency(getSaleTotal(sale))}</td><td className="p-4"><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{sale.status}</Badge></td><td className="p-4"><div className="flex gap-2"><button onClick={() => setSelectedSale(sale)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100" title="Ver detalhes"><Eye size={18} /></button><button disabled={sale.status === "Cancelada"} onClick={() => cancelSale(sale)} className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700 disabled:opacity-40">Cancelar</button></div></td></tr>)}</DataTable>{selectedSale && <SaleDetailsModal sale={selectedSale} onClose={() => setSelectedSale(null)} />}</div>;
+}
+
+function SaleDetailsModal({ sale, onClose }) {
+  const subtotal = sale.items.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0);
+
+  return (
+    <Modal title={`Detalhes da venda #${sale.id}`} onClose={onClose}>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Cliente</p>
+          <h3 className="mt-1 font-black text-slate-950">{sale.customerName || "Cliente não informado"}</h3>
+          <p className="mt-1 text-sm text-slate-500">Data da venda: {sale.date}</p>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Status</p>
+          <div className="mt-2 flex items-center gap-2"><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{sale.status}</Badge><Badge tone="blue">{sale.payment}</Badge></div>
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-slate-100 overflow-hidden">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-slate-950 text-white"><tr><th className="p-3">Item</th><th className="p-3">Qtd.</th><th className="p-3">Valor</th><th className="p-3">Subtotal</th></tr></thead>
+          <tbody className="divide-y divide-slate-100">
+            {sale.items.map((item) => <tr key={`${sale.id}-${item.productId}`}><td className="p-3 font-semibold">{item.name}</td><td className="p-3">{item.qty}</td><td className="p-3">{currency(item.price)}</td><td className="p-3 font-bold">{currency(item.qty * item.price)}</td></tr>)}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <div className="rounded-2xl bg-blue-50 p-4 text-blue-800"><p className="text-sm">Subtotal</p><b className="text-xl">{currency(subtotal)}</b></div>
+        <div className="rounded-2xl bg-amber-50 p-4 text-amber-800"><p className="text-sm">Desconto</p><b className="text-xl">{currency(sale.discount)}</b></div>
+        <div className="rounded-2xl bg-emerald-50 p-4 text-emerald-800"><p className="text-sm">Total</p><b className="text-xl">{currency(getSaleTotal(sale))}</b></div>
+        <div className="rounded-2xl bg-slate-50 p-4 text-slate-700"><p className="text-sm">Recebido / Troco</p><b className="text-xl">{sale.payment === "Dinheiro" ? `${currency(sale.amountPaid)} / ${currency(sale.change)}` : "—"}</b></div>
+      </div>
+    </Modal>
+  );
+}
+
+function ReceiptModal({ sale, onClose }) {
+  const subtotal = sale.items.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0);
+
+  const printReceipt = () => {
+    window.print();
+  };
+
+  return (
+    <Modal title={`Comprovante da venda #${sale.id}`} onClose={onClose}>
+      <div className="print:bg-white" id="comprovante-venda">
+        <div className="rounded-[1.75rem] border border-slate-100 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-5">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-700">Comprovante</p>
+              <h2 className="mt-1 text-2xl font-black text-slate-950">Gestão Comercial Integrada</h2>
+              <p className="mt-1 text-sm text-slate-500">Projeto Integrador — UNIVESP</p>
+            </div>
+            <div className="text-right text-sm text-slate-500">
+              <p>Venda #{sale.id}</p>
+              <p>{sale.date}</p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-400">Cliente</p><b>{sale.customerName || "Cliente não informado"}</b></div>
+            <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-400">Pagamento</p><b>{sale.payment}</b></div>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {sale.items.map((item) => <div key={`${sale.id}-recibo-${item.productId}`} className="flex items-center justify-between rounded-2xl border border-slate-100 p-4"><div><b>{item.name}</b><p className="text-xs text-slate-500">{item.qty} x {currency(item.price)}</p></div><b>{currency(item.qty * item.price)}</b></div>)}
+          </div>
+
+          <div className="mt-5 rounded-2xl bg-slate-950 p-5 text-white">
+            <div className="flex justify-between text-sm text-slate-300"><span>Subtotal</span><span>{currency(subtotal)}</span></div>
+            <div className="mt-2 flex justify-between text-sm text-slate-300"><span>Desconto</span><span>{currency(sale.discount)}</span></div>
+            {sale.payment === "Dinheiro" && <><div className="mt-2 flex justify-between text-sm text-slate-300"><span>Valor recebido</span><span>{currency(sale.amountPaid)}</span></div><div className="mt-2 flex justify-between text-sm text-slate-300"><span>Troco</span><span>{currency(sale.change)}</span></div></>}
+            <div className="mt-4 flex justify-between border-t border-white/10 pt-4 text-2xl font-black"><span>Total</span><span>{currency(getSaleTotal(sale))}</span></div>
+          </div>
+
+          <p className="mt-5 text-center text-xs text-slate-400">Obrigado pela preferência.</p>
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-col gap-3 md:flex-row md:justify-end">
+        <button onClick={printReceipt} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center justify-center gap-2"><Printer size={16} /> Imprimir comprovante</button>
+        <button onClick={onClose} className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20">Nova venda</button>
+      </div>
+    </Modal>
+  );
 }
 
 function Reports({ sales, products, customers, productSales, paymentData, salesByDay }) {
@@ -841,4 +934,3 @@ function Reports({ sales, products, customers, productSales, paymentData, salesB
 }
 
 export default App;
-
