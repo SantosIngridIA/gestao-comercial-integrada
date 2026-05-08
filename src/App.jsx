@@ -5,7 +5,9 @@ import {
   Boxes,
   Building2,
   CreditCard,
+  Download,
   Edit3,
+  Eye,
   FileText,
   Home,
   LogIn,
@@ -19,6 +21,7 @@ import {
   Search,
   ShoppingCart,
   Trash2,
+  Upload,
   UserRound,
   Users,
   Wallet,
@@ -163,6 +166,62 @@ function clienteParaBanco(cliente) {
     data_nascimento: cliente.birthday || null,
     observacoes: cliente.notes,
     status: cliente.status || "Novo",
+  };
+}
+
+function baixarJson(nomeArquivo, dados) {
+  const blob = new Blob([JSON.stringify(dados, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nomeArquivo;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function lerArquivoJson(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        resolve(JSON.parse(reader.result));
+      } catch {
+        reject(new Error("Arquivo inválido"));
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}
+
+function normalizarProdutoImportado(item, index) {
+  return {
+    id: item.id || Date.now() + index,
+    name: item.name || item.nome || "Produto importado",
+    sku: item.sku || item.codigo || `IMP-${Date.now().toString().slice(-5)}-${index}`,
+    category: item.category || item.categoria || "Importados",
+    description: item.description || item.descricao || "Produto importado por arquivo JSON",
+    cost: Number(item.cost ?? item.preco_custo ?? 0),
+    price: Number(item.price ?? item.preco_venda ?? 0),
+    stock: Number(item.stock ?? item.estoque ?? 0),
+    minStock: Number(item.minStock ?? item.estoque_minimo ?? 0),
+    status: item.status || "Ativo",
+  };
+}
+
+function normalizarClienteImportado(item, index) {
+  return {
+    id: item.id || Date.now() + index,
+    name: item.name || item.nome || "Cliente importado",
+    document: item.document || item.documento || "",
+    phone: item.phone || item.telefone || "",
+    email: item.email || "",
+    address: item.address || item.endereco || "",
+    birthday: item.birthday || item.data_nascimento || "",
+    notes: item.notes || item.observacoes || "Cliente importado por arquivo JSON",
+    status: item.status || "Novo",
   };
 }
 
@@ -461,6 +520,60 @@ function App() {
     showToast(`Entrada de ${qty} unidades registrada.`);
   };
 
+  const exportProducts = () => {
+    baixarJson("produtos-gestao-comercial.json", { tipo: "produtos", exportado_em: new Date().toISOString(), produtos: products });
+    showToast("Arquivo de produtos exportado com sucesso.");
+  };
+
+  const exportCustomers = () => {
+    baixarJson("clientes-gestao-comercial.json", { tipo: "clientes", exportado_em: new Date().toISOString(), clientes: customers });
+    showToast("Arquivo de clientes exportado com sucesso.");
+  };
+
+  const importProducts = async (file) => {
+    if (!file) return;
+    try {
+      const json = await lerArquivoJson(file);
+      const lista = Array.isArray(json) ? json : json.produtos || json.products || [];
+      if (!lista.length) return showToast("Nenhum produto encontrado no arquivo.");
+      const produtosImportados = lista.map(normalizarProdutoImportado);
+
+      if (usingDatabase) {
+        const { data, error } = await supabase.from("produtos").insert(produtosImportados.map(produtoParaBanco)).select();
+        if (error) throw error;
+        setProducts((current) => [...current, ...data.map(produtoDoBanco)]);
+      } else {
+        setProducts((current) => [...current, ...produtosImportados]);
+      }
+
+      showToast(`${produtosImportados.length} produto(s) importado(s) com sucesso.`);
+    } catch {
+      showToast("Não foi possível importar produtos. Use um arquivo JSON válido.");
+    }
+  };
+
+  const importCustomers = async (file) => {
+    if (!file) return;
+    try {
+      const json = await lerArquivoJson(file);
+      const lista = Array.isArray(json) ? json : json.clientes || json.customers || [];
+      if (!lista.length) return showToast("Nenhum cliente encontrado no arquivo.");
+      const clientesImportados = lista.map(normalizarClienteImportado);
+
+      if (usingDatabase) {
+        const { data, error } = await supabase.from("clientes").insert(clientesImportados.map(clienteParaBanco)).select();
+        if (error) throw error;
+        setCustomers((current) => [...current, ...data.map(clienteDoBanco)]);
+      } else {
+        setCustomers((current) => [...current, ...clientesImportados]);
+      }
+
+      showToast(`${clientesImportados.length} cliente(s) importado(s) com sucesso.`);
+    } catch {
+      showToast("Não foi possível importar clientes. Use um arquivo JSON válido.");
+    }
+  };
+
   const handleNavigate = (key) => {
     setActive(key);
     setSidebarOpen(false);
@@ -468,10 +581,10 @@ function App() {
 
   const renderContent = () => {
     if (active === "dashboard") return <Dashboard totalToday={totalToday} totalMonth={totalMonth} products={products} customers={customers} lowStock={lowStock} salesByDay={salesByDay} productSales={productSales} paymentData={paymentData} resetData={resetData} />;
-    if (active === "products") return <Products products={products} saveProduct={saveProduct} deleteProduct={deleteProduct} />;
+    if (active === "products") return <Products products={products} saveProduct={saveProduct} deleteProduct={deleteProduct} exportProducts={exportProducts} importProducts={importProducts} />;
     if (active === "stock") return <Stock products={products} movements={movements} addStock={addStock} />;
     if (active === "pdv") return <PDV products={products} customers={customers} cart={cart} addToCart={addToCart} updateCartQty={updateCartQty} removeFromCart={(id) => setCart((current) => current.filter((item) => item.productId !== id))} finishSale={finishSale} cartTotal={cartTotal} />;
-    if (active === "customers") return <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} sales={sales} />;
+    if (active === "customers") return <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} sales={sales} exportCustomers={exportCustomers} importCustomers={importCustomers} />;
     if (active === "crm") return <CRM customers={customers} sales={sales} />;
     if (active === "sales") return <Sales sales={sales} cancelSale={cancelSale} />;
     if (active === "reports") return <Reports sales={sales} products={products} customers={customers} productSales={productSales} paymentData={paymentData} salesByDay={salesByDay} />;
@@ -661,14 +774,15 @@ function DataTable({ headers, children }) {
   return <div className="overflow-hidden rounded-[1.75rem] border border-white/70 bg-white/90 shadow-[0_20px_60px_rgba(15,23,42,0.07)] backdrop-blur"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-950 text-slate-100"><tr>{headers.map((header) => <th key={header} className="p-4 text-xs font-black uppercase tracking-[0.16em] whitespace-nowrap">{header}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{children}</tbody></table></div></div>;
 }
 
-function Products({ products, saveProduct, deleteProduct }) {
+function Products({ products, saveProduct, deleteProduct, exportProducts, importProducts }) {
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(emptyProduct);
   const filtered = products.filter((product) => `${product.name} ${product.sku} ${product.category}`.toLowerCase().includes(query.toLowerCase()));
   const openForm = (product) => { setForm(product ? { ...product } : emptyProduct); setModal(true); };
   const submit = async () => { if (await saveProduct(form)) setModal(false); };
-  return <div><SectionTitle title="Produtos" subtitle="Cadastro real, edição, pesquisa e alerta de estoque mínimo." /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar produto, SKU ou categoria..." button="Novo produto" onClick={() => openForm()} /><DataTable headers={["Produto", "SKU", "Categoria", "Preço", "Estoque", "Status", "Ações"]}>{filtered.map((product) => <tr key={product.id} className="border-t border-slate-100"><td className="p-4"><b>{product.name}</b><p className="text-xs text-slate-500">{product.description}</p></td><td className="p-4">{product.sku}</td><td className="p-4">{product.category}</td><td className="p-4">{currency(product.price)}</td><td className="p-4">{product.stock <= product.minStock ? <Badge tone="amber">{product.stock} baixo</Badge> : `${product.stock} un.`}</td><td className="p-4"><Badge tone={product.status === "Ativo" ? "green" : "slate"}>{product.status}</Badge></td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(product)} className="text-blue-700"><Edit3 size={18} /></button><button onClick={() => deleteProduct(product.id)} className="text-red-600"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={form.id ? "Editar produto" : "Cadastrar produto"} onClose={() => setModal(false)}><ProductForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
+
+  return <div><SectionTitle title="Produtos" subtitle="Cadastro real, edição, pesquisa, importação, exportação e alerta de estoque mínimo." actions={<div className="flex flex-wrap gap-2"><button onClick={exportProducts} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Download size={16} /> Exportar</button><label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Upload size={16} /> Importar<input type="file" accept="application/json,.json" className="hidden" onChange={(e) => { importProducts(e.target.files?.[0]); e.target.value = ""; }} /></label></div>} /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar produto, SKU ou categoria..." button="Novo produto" onClick={() => openForm()} /><DataTable headers={["Produto", "SKU", "Categoria", "Preço", "Estoque", "Status", "Ações"]}>{filtered.map((product) => <tr key={product.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4"><b>{product.name}</b><p className="text-xs text-slate-500">{product.description}</p></td><td className="p-4">{product.sku}</td><td className="p-4">{product.category}</td><td className="p-4">{currency(product.price)}</td><td className="p-4">{product.stock <= product.minStock ? <Badge tone="amber">{product.stock} baixo</Badge> : `${product.stock} un.`}</td><td className="p-4"><Badge tone={product.status === "Ativo" ? "green" : "slate"}>{product.status}</Badge></td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(product)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Edit3 size={18} /></button><button onClick={() => deleteProduct(product.id)} className="rounded-xl bg-red-50 p-2 text-red-600 hover:bg-red-100"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={form.id ? "Editar produto" : "Cadastrar produto"} onClose={() => setModal(false)}><ProductForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
 }
 
 function ProductForm({ form, setForm, onSubmit }) {
@@ -694,14 +808,15 @@ function PDV({ products, customers, cart, addToCart, updateCartQty, removeFromCa
   return <div><SectionTitle title="PDV / Frente de Caixa" subtitle="Venda com cliente, desconto, forma de pagamento, dinheiro e cálculo automático de troco." /><div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]"><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><div className="relative mb-4"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar produto por nome ou SKU..." className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div><div className="grid gap-3 md:grid-cols-2">{filtered.map((product) => <button key={product.id} onClick={() => addToCart(product)} className="text-left rounded-2xl border border-slate-100 p-4 hover:border-blue-300 hover:bg-blue-50"><div className="flex justify-between gap-3"><b>{product.name}</b><span className="font-bold text-blue-700">{currency(product.price)}</span></div><p className="text-xs text-slate-500">SKU {product.sku} • estoque {product.stock}</p></button>)}</div></div><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold flex items-center gap-2"><ShoppingCart size={18} /> Carrinho</h3><div className="mt-4 space-y-3 min-h-[170px]">{cart.length === 0 && <p className="text-sm text-slate-400">Nenhum produto adicionado.</p>}{cart.map((item) => <div key={item.productId} className="rounded-2xl bg-slate-50 p-4"><div className="flex justify-between gap-3"><b>{item.name}</b><button onClick={() => removeFromCart(item.productId)} className="text-red-600"><Trash2 size={16} /></button></div><div className="mt-2 flex items-center justify-between gap-3"><input type="number" min="1" value={item.qty} onChange={(e) => updateCartQty(item.productId, e.target.value)} className="w-20 rounded-xl border border-slate-200 px-3 py-2" /><p className="text-sm text-slate-500">{currency(item.qty * item.price)}</p></div></div>)}</div><div className="mt-5 border-t border-slate-100 pt-5 space-y-3"><Select label="Cliente" value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">Cliente não informado</option>{customers.filter((c) => c.status !== "Inativo").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select><Select label="Forma de pagamento" value={payment} onChange={(e) => setPayment(e.target.value)}><option>PIX</option><option>Dinheiro</option><option>Cartão de débito</option><option>Cartão de crédito</option><option>Outros</option></Select><Input label="Desconto" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} />{payment === "Dinheiro" && <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 space-y-3"><Input label="Valor recebido em dinheiro" type="number" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} /><div className="flex justify-between text-sm"><span>Valor recebido</span><b>{currency(amountPaid)}</b></div><div className="flex justify-between text-sm"><span>Troco</span><b className="text-emerald-700">{currency(change)}</b></div>{insufficientCash && <p className="text-sm font-medium text-red-600">Valor recebido menor que o total da venda.</p>}</div>}<div className="flex justify-between text-sm"><span>Subtotal</span><b>{currency(cartTotal)}</b></div><div className="flex justify-between text-sm"><span>Desconto</span><b>{currency(discount)}</b></div><div className="flex justify-between text-lg font-bold"><span>Total</span><span>{currency(finalTotal)}</span></div><button onClick={() => finishSale({ customerId, payment, discount, amountPaid, change })} disabled={insufficientCash} className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-3 font-bold text-white shadow-lg shadow-emerald-700/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50">Finalizar venda</button></div></div></div></div>;
 }
 
-function Customers({ customers, saveCustomer, deleteCustomer, sales }) {
+function Customers({ customers, saveCustomer, deleteCustomer, sales, exportCustomers, importCustomers }) {
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(emptyCustomer);
   const filtered = customers.filter((customer) => `${customer.name} ${customer.phone} ${customer.email}`.toLowerCase().includes(query.toLowerCase()));
   const openForm = (customer) => { setForm(customer ? { ...customer } : emptyCustomer); setModal(true); };
   const submit = async () => { if (await saveCustomer(form)) setModal(false); };
-  return <div><SectionTitle title="Clientes" subtitle="Cadastro real, pesquisa e histórico de relacionamento do cliente." /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar cliente..." button="Novo cliente" onClick={() => openForm()} /><DataTable headers={["Cliente", "Contato", "Endereço", "Status", "Compras", "Ações"]}>{filtered.map((customer) => <tr key={customer.id} className="border-t border-slate-100"><td className="p-4"><b>{customer.name}</b><p className="text-xs text-slate-500">{customer.email}</p></td><td className="p-4">{customer.phone}</td><td className="p-4">{customer.address}</td><td className="p-4"><Badge tone={customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></td><td className="p-4">{sales.filter((sale) => sale.customerId === customer.id).length}</td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(customer)} className="text-blue-700"><Edit3 size={18} /></button><button onClick={() => deleteCustomer(customer.id)} className="text-red-600"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={form.id ? "Editar cliente" : "Cadastrar cliente"} onClose={() => setModal(false)}><CustomerForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
+
+  return <div><SectionTitle title="Clientes" subtitle="Cadastro real, pesquisa, importação, exportação e histórico de relacionamento do cliente." actions={<div className="flex flex-wrap gap-2"><button onClick={exportCustomers} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Download size={16} /> Exportar</button><label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Upload size={16} /> Importar<input type="file" accept="application/json,.json" className="hidden" onChange={(e) => { importCustomers(e.target.files?.[0]); e.target.value = ""; }} /></label></div>} /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar cliente..." button="Novo cliente" onClick={() => openForm()} /><DataTable headers={["Cliente", "Contato", "Endereço", "Status", "Compras", "Ações"]}>{filtered.map((customer) => <tr key={customer.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4"><b>{customer.name}</b><p className="text-xs text-slate-500">{customer.email}</p></td><td className="p-4">{customer.phone}</td><td className="p-4">{customer.address}</td><td className="p-4"><Badge tone={customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></td><td className="p-4">{sales.filter((sale) => sale.customerId === customer.id).length}</td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(customer)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Edit3 size={18} /></button><button onClick={() => deleteCustomer(customer.id)} className="rounded-xl bg-red-50 p-2 text-red-600 hover:bg-red-100"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={form.id ? "Editar cliente" : "Cadastrar cliente"} onClose={() => setModal(false)}><CustomerForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
 }
 
 function CustomerForm({ form, setForm, onSubmit }) {
@@ -710,7 +825,10 @@ function CustomerForm({ form, setForm, onSubmit }) {
 }
 
 function CRM({ customers, sales }) {
-  return <div><SectionTitle title="CRM" subtitle="Análise simples do relacionamento, frequência e oportunidades com clientes." /><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{customers.map((customer) => { const customerSales = sales.filter((sale) => sale.customerId === customer.id && sale.status === "Concluída"); const total = customerSales.reduce((sum, sale) => sum + getSaleTotal(sale), 0); return <div key={customer.id} className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold">{customer.name}</h3><p className="text-sm text-slate-500">{customer.phone}</p></div><Badge tone={customer.status === "Recorrente" ? "green" : customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></div><div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Compras</p><b>{customerSales.length}</b></div><div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Total</p><b>{currency(total)}</b></div></div><p className="mt-4 text-sm text-slate-500">{customer.notes || "Sem observações."}</p>{customerSales.length === 0 ? <p className="mt-3 text-sm text-amber-600">Oportunidade: cliente sem compra recente.</p> : <p className="mt-3 text-sm text-emerald-600">Cliente com histórico de compra.</p>}</div>; })}</div></div>;
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const selectedSales = selectedCustomer ? sales.filter((sale) => sale.customerId === selectedCustomer.id) : [];
+
+  return <div><SectionTitle title="CRM" subtitle="Análise do relacionamento, frequência, oportunidades e histórico de compras dos clientes." /><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{customers.map((customer) => { const customerSales = sales.filter((sale) => sale.customerId === customer.id && sale.status === "Concluída"); const total = customerSales.reduce((sum, sale) => sum + getSaleTotal(sale), 0); return <div key={customer.id} className="rounded-[1.75rem] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.07)] backdrop-blur transition hover:-translate-y-1"><div className="flex items-start justify-between gap-3"><div><h3 className="font-black text-slate-950">{customer.name}</h3><p className="text-sm text-slate-500">{customer.phone}</p></div><Badge tone={customer.status === "Recorrente" ? "green" : customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></div><div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Compras</p><b>{customerSales.length}</b></div><div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Total</p><b>{currency(total)}</b></div></div><p className="mt-4 text-sm text-slate-500">{customer.notes || "Sem observações."}</p>{customerSales.length === 0 ? <p className="mt-3 text-sm font-semibold text-amber-600">Oportunidade: cliente sem compra recente.</p> : <p className="mt-3 text-sm font-semibold text-emerald-600">Cliente com histórico de compra.</p>}<button onClick={() => setSelectedCustomer(customer)} className="mt-5 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center justify-center gap-2"><Eye size={16} /> Visualizar histórico de compras</button></div>; })}</div>{selectedCustomer && <Modal title={`Histórico de compras — ${selectedCustomer.name}`} onClose={() => setSelectedCustomer(null)}>{selectedSales.length === 0 ? <div className="rounded-2xl bg-amber-50 p-5 text-sm font-semibold text-amber-700">Este cliente ainda não possui compras registradas.</div> : <div className="space-y-3">{selectedSales.map((sale) => <div key={sale.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4"><div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><b className="text-slate-950">Venda #{sale.id}</b><p className="text-xs text-slate-500">{sale.date} • {sale.payment} • {sale.status}</p></div><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{currency(getSaleTotal(sale))}</Badge></div><div className="mt-3 text-sm text-slate-600">{sale.items.map((item) => <p key={`${sale.id}-${item.productId}`}>{item.qty}x {item.name} — {currency(item.price)}</p>)}</div>{sale.payment === "Dinheiro" && <div className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-600"><p>Recebido: <b>{currency(sale.amountPaid)}</b></p><p>Troco: <b>{currency(sale.change)}</b></p></div>}</div>)}</div>}</Modal>}</div>;
 }
 
 function Sales({ sales, cancelSale }) {
@@ -723,3 +841,4 @@ function Reports({ sales, products, customers, productSales, paymentData, salesB
 }
 
 export default App;
+
