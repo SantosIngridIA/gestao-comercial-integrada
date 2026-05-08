@@ -326,7 +326,11 @@ function normalizarProdutoImportado(item, index) {
     price: Number(item.price || item.preco_venda || item.valor_venda || 0),
     stock: Number(item.stock || item.estoque || 0),
     minStock: Number(item.minStock || item.estoque_minimo || item.minimo || 0),
-    status: item.statfunction normalizarClienteImportado(item, index) {
+    status: item.status || "Ativo",
+  };
+}
+
+function normalizarClienteImportado(item, index) {
   return {
     id: item.id || Date.now() + index,
     name: item.name || item.nome || item.cliente || "Cliente importado",
@@ -336,7 +340,11 @@ function normalizarProdutoImportado(item, index) {
     address: item.address || item.endereco || "",
     birthday: item.birthday || item.data_nascimento || "",
     notes: item.notes || item.observacoes || "Cliente importado por arquivo Excel XML",
-    status: item.status || "function normalizarFornecedorImportado(item, index) {
+    status: item.status || "Novo",
+  };
+}
+
+function normalizarFornecedorImportado(item, index) {
   return {
     id: item.id || Date.now() + index,
     name: item.name || item.nome || item.fornecedor || "Fornecedor importado",
@@ -348,10 +356,6 @@ function normalizarProdutoImportado(item, index) {
     address: item.address || item.endereco || "",
     notes: item.notes || item.observacoes || "Fornecedor importado por arquivo Excel XML",
     status: item.status || "Ativo",
-  };
-}
-
-function Apptatus || "Ativo",
   };
 }
 
@@ -742,7 +746,17 @@ function App() {
       { key: "name", label: "Nome" },
       { key: "sku", label: "SKU" },
       { key: "category", label: "Categoria" },
-      { key: "const exportCustomers = () => {
+      { key: "description", label: "Descricao" },
+      { key: "cost", label: "Preco Custo" },
+      { key: "price", label: "Preco Venda" },
+      { key: "stock", label: "Estoque" },
+      { key: "minStock", label: "Estoque Minimo" },
+      { key: "status", label: "Status" },
+    ], products);
+    showToast("Arquivo Excel XML de produtos exportado com sucesso.");
+  };
+
+  const exportCustomers = () => {
     baixarExcelXml("clientes-gestao-comercial.xml", "Clientes", [
       { key: "name", label: "Nome" },
       { key: "document", label: "Documento" },
@@ -754,16 +768,6 @@ function App() {
       { key: "status", label: "Status" },
     ], customers);
     showToast("Arquivo Excel XML de clientes exportado com sucesso.");
-  };
-
-  const importProductsatus" },
-    ], products);
-    showToast("Arquivo Excel XML de produtos exportado com sucesso.");
-  };
-
-  const exportCustomers = () => {
-    baixarJson("clientes-gestao-comercial.json", { tipo: "clientes", exportado_em: new Date().toISOString(), clientes: customers });
-    showToast("Arquivo de clientes exportado com sucesso.");
   };
 
   const importProducts = async (file) => {
@@ -1165,7 +1169,7 @@ function Customers({ customers, saveCustomer, deleteCustomer, sales, exportCusto
   const openForm = (customer) => { setForm(customer ? { ...customer } : emptyCustomer); setModal(true); };
   const submit = async () => { if (await saveCustomer(form)) setModal(false); };
 
-  return <div><SectionTitle title="Clientes" subtitle="Cadastro real, pesquisa, importação, exportação e histórico de relacionamento do cliente." actions={<div className="flex flex-wrap gap-2"><button onClick={exportCustomers} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Download size={16} /> Exportar</button><label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Upload size={16} /> Importar<input type="file" accept=".xml,application/xml,text/xml"accept="application/json,.json" className="hidden" onChange={(e) => { importCustomers(e.target.files?.[0]); e.target.value = ""; }} /></label></div>} /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar cliente..." button="Novo cliente" onClick={() => openForm()} /><DataTable headers={["Cliente", "Contato", "Endereço", "Status", "Compras", "Ações"]}>{filtered.map((customer) => <tr key={customer.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4"><b>{customer.name}</b><p className="text-xs text-slate-500">{customer.email}</p></td><td className="p-4">{customer.phone}</td><td className="p-4">{customer.address}</td><td className="p-4"><Badge tone={customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></td><td className="p-4">{sales.filter((sale) => sale.customerId === customer.id).length}</td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(customer)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Edit3 size={18} /></button><button onClick={() => deleteCustomer(customer.id)} className="rounded-xl bg-red-50 p-2 text-red-600 hover:bg-red-100"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={form.id ? "Editar cliente" : "Cadastrar cliente"} onClose={() => setModal(false)}><CustomerForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
+  return <div><SectionTitle title="Clientes" subtitle="Cadastro real, pesquisa, importação, exportação e histórico de relacionamento do cliente." actions={<div className="flex flex-wrap gap-2"><button onClick={exportCustomers} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Download size={16} /> Exportar</button><label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Upload size={16} /> Importar<input type="file" accept=".xml,application/xml,text/xml" className="hidden" onChange={(e) => { importCustomers(e.target.files?.[0]); e.target.value = ""; }} /></label></div>} /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar cliente..." button="Novo cliente" onClick={() => openForm()} /><DataTable headers={["Cliente", "Contato", "Endereço", "Status", "Compras", "Ações"]}>{filtered.map((customer) => <tr key={customer.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4"><b>{customer.name}</b><p className="text-xs text-slate-500">{customer.email}</p></td><td className="p-4">{customer.phone}</td><td className="p-4">{customer.address}</td><td className="p-4"><Badge tone={customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></td><td className="p-4">{sales.filter((sale) => sale.customerId === customer.id).length}</td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(customer)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Edit3 size={18} /></button><button onClick={() => deleteCustomer(customer.id)} className="rounded-xl bg-red-50 p-2 text-red-600 hover:bg-red-100"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={form.id ? "Editar cliente" : "Cadastrar cliente"} onClose={() => setModal(false)}><CustomerForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
 }
 
 function CustomerForm({ form, setForm, onSubmit }) {
@@ -1181,7 +1185,7 @@ function Suppliers({ suppliers, saveSupplier, deleteSupplier, exportSuppliers, i
   const openForm = (supplier) => { setForm(supplier ? { ...supplier } : emptySupplier); setModal(true); };
   const submit = async () => { if (await saveSupplier(form)) setModal(false); };
 
-  return <div><SectionTitle title="Fornecedores" subtitle="Cadastro de fornecedores, contatos comerciais, produtos fornecidos, importação e exportação." actions={<div className="flex flex-wrap gap-2"><button onClick={exportSuppliers} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Download size={16} /> Exportar</button><label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Upload size={16}accept=".xml,application/xml,text/xml" /> Importar<input type="file" accept="application/json,.json" className="hidden" onChange={(e) => { importSuppliers(e.target.files?.[0]); e.target.value = ""; }} /></label></div>} /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar fornecedor, CNPJ, categoria ou item fornecido..." button="Novo fornecedor" onClick={() => openForm()} /><DataTable headers={["Fornecedor", "CNPJ", "Contato", "Categoria", "Fornece", "Status", "Ações"]}>{filtered.map((supplier) => <tr key={supplier.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4"><b>{supplier.name}</b><p className="text-xs text-slate-500">{supplier.email}</p></td><td className="p-4">{supplier.document}</td><td className="p-4">{supplier.phone}</td><td className="p-4">{supplier.category}</td><td className="p-4 text-sm text-slate-600">{supplier.suppliedItems}</td><td className="p-4"><Badge tone={supplier.status === "Ativo" ? "green" : "slate"}>{supplier.status}</Badge></td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(supplier)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Edit3 size={18} /></button><button onClick={() => deleteSupplier(supplier.id)} className="rounded-xl bg-red-50 p-2 text-red-600 hover:bg-red-100"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={form.id ? "Editar fornecedor" : "Cadastrar fornecedor"} onClose={() => setModal(false)}><SupplierForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
+  return <div><SectionTitle title="Fornecedores" subtitle="Cadastro de fornecedores, contatos comerciais, produtos fornecidos, importação e exportação." actions={<div className="flex flex-wrap gap-2"><button onClick={exportSuppliers} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Download size={16} /> Exportar</button><label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Upload size={16} /> Importar<input type="file" accept=".xml,application/xml,text/xml" className="hidden" onChange={(e) => { importSuppliers(e.target.files?.[0]); e.target.value = ""; }} /></label></div>} /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar fornecedor, CNPJ, categoria ou item fornecido..." button="Novo fornecedor" onClick={() => openForm()} /><DataTable headers={["Fornecedor", "CNPJ", "Contato", "Categoria", "Fornece", "Status", "Ações"]}>{filtered.map((supplier) => <tr key={supplier.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4"><b>{supplier.name}</b><p className="text-xs text-slate-500">{supplier.email}</p></td><td className="p-4">{supplier.document}</td><td className="p-4">{supplier.phone}</td><td className="p-4">{supplier.category}</td><td className="p-4 text-sm text-slate-600">{supplier.suppliedItems}</td><td className="p-4"><Badge tone={supplier.status === "Ativo" ? "green" : "slate"}>{supplier.status}</Badge></td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(supplier)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Edit3 size={18} /></button><button onClick={() => deleteSupplier(supplier.id)} className="rounded-xl bg-red-50 p-2 text-red-600 hover:bg-red-100"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={form.id ? "Editar fornecedor" : "Cadastrar fornecedor"} onClose={() => setModal(false)}><SupplierForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
 }
 
 function SupplierForm({ form, setForm, onSubmit }) {
