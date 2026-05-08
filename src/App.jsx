@@ -1,12 +1,48 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { BarChart3, Boxes, Building2, CreditCard, Edit3, FileText, Home, LogIn, LogOut, Menu, Package, Plus, Receipt, RotateCcw, Save, Search, ShoppingCart, Trash2, UserPlus, UserRound, Users, Wallet, X } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  BarChart3,
+  Boxes,
+  Building2,
+  CreditCard,
+  Edit3,
+  FileText,
+  Home,
+  LogIn,
+  LogOut,
+  Menu,
+  Package,
+  Plus,
+  Receipt,
+  RotateCcw,
+  Save,
+  Search,
+  ShoppingCart,
+  Trash2,
+  UserRound,
+  Users,
+  Wallet,
+  X,
+} from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { supabase } from "./supabaseClient";
 
-const currency = (value) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value) || 0);
+const currency = (value) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value) || 0);
+
 const today = new Date().toISOString().slice(0, 10);
-const storageKey = "gestao-comercial-integrada-v4";
+const storageKey = "gestao-comercial-integrada-estavel";
 const chartColors = ["#2563eb", "#059669", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2"];
 
 const initialProducts = [
@@ -38,6 +74,7 @@ const initialSales = [
 const initialMovements = [
   { id: 1, date: today, productName: "Camiseta Básica", type: "Venda", qty: -2, user: "Administrador" },
   { id: 2, date: today, productName: "Chocolate", type: "Venda", qty: -1, user: "Administrador" },
+  { id: 3, date: today, productName: "Água Mineral", type: "Entrada", qty: 30, user: "Administrador" },
 ];
 
 const menu = [
@@ -74,28 +111,64 @@ function readStorage() {
 }
 
 function produtoDoBanco(produto) {
-  return { id: produto.id, name: produto.nome, sku: produto.sku || "", category: produto.categoria || "Geral", description: produto.descricao || "Sem descrição", cost: Number(produto.preco_custo) || 0, price: Number(produto.preco_venda) || 0, stock: Number(produto.estoque) || 0, minStock: Number(produto.estoque_minimo) || 0, status: produto.status || "Ativo" };
+  return {
+    id: produto.id,
+    name: produto.nome,
+    sku: produto.sku || "",
+    category: produto.categoria || "Geral",
+    description: produto.descricao || "Sem descrição",
+    cost: Number(produto.preco_custo) || 0,
+    price: Number(produto.preco_venda) || 0,
+    stock: Number(produto.estoque) || 0,
+    minStock: Number(produto.estoque_minimo) || 0,
+    status: produto.status || "Ativo",
+  };
 }
 
 function produtoParaBanco(produto) {
-  return { nome: produto.name, sku: produto.sku, categoria: produto.category, descricao: produto.description, preco_custo: Number(produto.cost) || 0, preco_venda: Number(produto.price) || 0, estoque: Number(produto.stock) || 0, estoque_minimo: Number(produto.minStock) || 0, status: produto.status || "Ativo" };
+  return {
+    nome: produto.name,
+    sku: produto.sku,
+    categoria: produto.category,
+    descricao: produto.description,
+    preco_custo: Number(produto.cost) || 0,
+    preco_venda: Number(produto.price) || 0,
+    estoque: Number(produto.stock) || 0,
+    estoque_minimo: Number(produto.minStock) || 0,
+    status: produto.status || "Ativo",
+  };
 }
 
 function clienteDoBanco(cliente) {
-  return { id: cliente.id, name: cliente.nome, document: cliente.documento || "", phone: cliente.telefone || "", email: cliente.email || "", address: cliente.endereco || "", birthday: cliente.data_nascimento || "", notes: cliente.observacoes || "", status: cliente.status || "Novo" };
+  return {
+    id: cliente.id,
+    name: cliente.nome,
+    document: cliente.documento || "",
+    phone: cliente.telefone || "",
+    email: cliente.email || "",
+    address: cliente.endereco || "",
+    birthday: cliente.data_nascimento || "",
+    notes: cliente.observacoes || "",
+    status: cliente.status || "Novo",
+  };
 }
 
 function clienteParaBanco(cliente) {
-  return { nome: cliente.name, documento: cliente.document, telefone: cliente.phone, email: cliente.email, endereco: cliente.address, data_nascimento: cliente.birthday || null, observacoes: cliente.notes, status: cliente.status || "Novo" };
+  return {
+    nome: cliente.name,
+    documento: cliente.document,
+    telefone: cliente.phone,
+    email: cliente.email,
+    endereco: cliente.address,
+    data_nascimento: cliente.birthday || null,
+    observacoes: cliente.notes,
+    status: cliente.status || "Novo",
+  };
 }
 
 function App() {
   const saved = readStorage();
-  const [session, setSession] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [authMode, setAuthMode] = useState("login");
-  const [authForm, setAuthForm] = useState({ name: "", email: "", password: "", profile: "Administrador" });
-  const [userProfile, setUserProfile] = useState(null);
+  const [logged, setLogged] = useState(false);
   const [active, setActive] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [products, setProducts] = useState(saved?.products || initialProducts);
@@ -112,46 +185,6 @@ function App() {
     showToast.timeoutId = window.setTimeout(() => setToast(""), 2800);
   };
 
-  const carregarPerfil = async (userId) => {
-    if (!userId) return null;
-    try {
-      const { data, error } = await supabase.from("perfis").select("*").eq("id", userId).single();
-      if (error) throw error;
-      setUserProfile(data);
-      return data;
-    } catch {
-      const fallback = { id: userId, nome: "Usuário", perfil: "Operador" };
-      setUserProfile(fallback);
-      return fallback;
-    }
-  };
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function iniciarSessao() {
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) return;
-      setSession(data.session);
-      if (data.session?.user?.id) await carregarPerfil(data.session.user.id);
-      setAuthLoading(false);
-    }
-
-    iniciarSessao();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
-      setSession(currentSession);
-      if (currentSession?.user?.id) await carregarPerfil(currentSession.user.id);
-      else setUserProfile(null);
-      setAuthLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-      listener.subscription.unsubscribe();
-    };
-  }, []);
-
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify({ products, customers, sales, movements }));
   }, [products, customers, sales, movements]);
@@ -163,13 +196,17 @@ function App() {
           supabase.from("produtos").select("*").order("id", { ascending: true }),
           supabase.from("clientes").select("*").order("id", { ascending: true }),
         ]);
+
         if (produtosResposta.error) throw produtosResposta.error;
         if (clientesResposta.error) throw clientesResposta.error;
+
         if (produtosResposta.data?.length) setProducts(produtosResposta.data.map(produtoDoBanco));
         if (clientesResposta.data?.length) setCustomers(clientesResposta.data.map(clienteDoBanco));
         setUsingDatabase(true);
+        showToast("Produtos e clientes carregados do banco Supabase.");
       } catch {
         setUsingDatabase(false);
+        showToast("Banco não conectado. Usando dados locais do navegador.");
       }
     }
     carregarDadosDoBanco();
@@ -181,29 +218,31 @@ function App() {
 
   const productSales = useMemo(() => {
     const salesMap = {};
-    sales.filter((sale) => sale.status === "Concluída").forEach((sale) => sale.items.forEach((item) => { salesMap[item.name] = (salesMap[item.name] || 0) + Number(item.qty); }));
+    sales.filter((sale) => sale.status === "Concluída").forEach((sale) => {
+      sale.items.forEach((item) => {
+        salesMap[item.name] = (salesMap[item.name] || 0) + Number(item.qty);
+      });
+    });
     return Object.entries(salesMap).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty).slice(0, 6);
   }, [sales]);
 
   const paymentData = useMemo(() => {
     const paymentMap = {};
-    sales.filter((sale) => sale.status === "Concluída").forEach((sale) => { paymentMap[sale.payment] = (paymentMap[sale.payment] || 0) + getSaleTotal(sale); });
+    sales.filter((sale) => sale.status === "Concluída").forEach((sale) => {
+      paymentMap[sale.payment] = (paymentMap[sale.payment] || 0) + getSaleTotal(sale);
+    });
     return Object.entries(paymentMap).map(([name, value]) => ({ name, value }));
   }, [sales]);
 
   const salesByDay = useMemo(() => {
     const dayMap = {};
-    sales.filter((sale) => sale.status === "Concluída").forEach((sale) => { dayMap[sale.date.slice(5)] = (dayMap[sale.date.slice(5)] || 0) + getSaleTotal(sale); });
+    sales.filter((sale) => sale.status === "Concluída").forEach((sale) => {
+      dayMap[sale.date.slice(5)] = (dayMap[sale.date.slice(5)] || 0) + getSaleTotal(sale);
+    });
     return Object.entries(dayMap).map(([date, total]) => ({ date, total })).sort((a, b) => a.date.localeCompare(b.date));
   }, [sales]);
 
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0), [cart]);
-  const isOperador = userProfile?.perfil === "Operador";
-  const visibleMenu = isOperador ? menu.filter((item) => ["dashboard", "products", "pdv", "customers", "sales"].includes(item.key)) : menu;
-
-  useEffect(() => {
-    if (isOperador && !visibleMenu.some((item) => item.key === active)) setActive("dashboard");
-  }, [isOperador, active, visibleMenu]);
 
   const resetData = () => {
     localStorage.removeItem(storageKey);
@@ -215,106 +254,25 @@ function App() {
     showToast("Dados restaurados para o estado inicial.");
   };
 
-  const handleLogin = async () => {
-  if (!authForm.email || !authForm.password) {
-    showToast("Informe e-mail e senha.");
-    return;
-  }
-
-  setAuthLoading(true);
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: authForm.email,
-    password: authForm.password,
-  });
-
-  if (error) {
-    setAuthLoading(false);
-
-    if (error.message?.toLowerCase().includes("email not confirmed")) {
-      showToast("E-mail ainda não confirmado. Confirme no Supabase ou desative confirmação de e-mail.");
-      return;
-    }
-
-    showToast("Não foi possível entrar. Confira e-mail e senha.");
-    return;
-  }
-
-  if (data.session) {
-    setSession(data.session);
-
-    if (data.user?.id) {
-      await carregarPerfil(data.user.id);
-    }
-
-    setAuthLoading(false);
-    showToast("Login realizado com sucesso.");
-    return;
-  }
-
-  setAuthLoading(false);
-  showToast("Login realizado, mas a sessão não foi carregada.");
-};
-  const handleSignUp = async () => {
-  if (!authForm.name || !authForm.email || !authForm.password) {
-    showToast("Preencha nome, e-mail e senha.");
-    return;
-  }
-
-  if (authForm.password.length < 6) {
-    showToast("A senha precisa ter pelo menos 6 caracteres.");
-    return;
-  }
-
-  setAuthLoading(true);
-
-  const { data, error } = await supabase.auth.signUp({
-    email: authForm.email,
-    password: authForm.password,
-    options: {
-      data: {
-        nome: authForm.name,
-        perfil: authForm.profile,
-      },
-    },
-  });
-
-  if (error) {
-    setAuthLoading(false);
-    showToast("Não foi possível criar o usuário. Verifique se o e-mail já está cadastrado.");
-    return;
-  }
-
-  if (data.user?.id) {
-    const { error: profileError } = await supabase.from("perfis").upsert({
-      id: data.user.id,
-      nome: authForm.name,
-      perfil: authForm.profile,
-    });
-
-    if (profileError) {
-      setAuthLoading(false);
-      showToast("Usuário criado, mas houve erro ao salvar o perfil.");
-      return;
-    }
-  }
-
-  setAuthLoading(false);
-  setAuthMode("login");
-  showToast("Usuário cadastrado com sucesso. Agora entre com e-mail e senha.");
-};
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    setUserProfile(null);
-    setCart([]);
-    showToast("Logout realizado com sucesso.");
-  };
-
   const saveProduct = async (form) => {
-    if (!form.name || !form.price || !form.stock) return showToast("Preencha nome, preço de venda e estoque."), false;
-    const product = { ...form, id: form.id || getNextId(products), sku: form.sku || `PRO-${Date.now().toString().slice(-5)}`, cost: Number(form.cost) || 0, price: Number(form.price) || 0, stock: Number(form.stock) || 0, minStock: Number(form.minStock) || 0, category: form.category || "Geral", description: form.description || "Sem descrição", status: form.status || "Ativo" };
+    if (!form.name || !form.price || !form.stock) {
+      showToast("Preencha nome, preço de venda e estoque.");
+      return false;
+    }
+
+    const product = {
+      ...form,
+      id: form.id || getNextId(products),
+      sku: form.sku || `PRO-${Date.now().toString().slice(-5)}`,
+      cost: Number(form.cost) || 0,
+      price: Number(form.price) || 0,
+      stock: Number(form.stock) || 0,
+      minStock: Number(form.minStock) || 0,
+      category: form.category || "Geral",
+      description: form.description || "Sem descrição",
+      status: form.status || "Ativo",
+    };
+
     try {
       if (usingDatabase) {
         if (form.id) {
@@ -341,20 +299,24 @@ function App() {
     const productInCart = cart.some((item) => item.productId === productId);
     const productInSales = sales.some((sale) => sale.items.some((item) => item.productId === productId));
     const markInactive = productInCart || productInSales;
+
     try {
       if (usingDatabase) {
         if (markInactive) {
           const { error } = await supabase.from("produtos").update({ status: "Inativo" }).eq("id", productId);
           if (error) throw error;
           setProducts((current) => current.map((product) => product.id === productId ? { ...product, status: "Inativo" } : product));
-          return showToast("Produto vinculado a vendas foi marcado como inativo.");
+          showToast("Produto vinculado a vendas foi marcado como inativo.");
+          return;
         }
         const { error } = await supabase.from("produtos").delete().eq("id", productId);
         if (error) throw error;
       }
+
       if (markInactive) {
         setProducts((current) => current.map((product) => product.id === productId ? { ...product, status: "Inativo" } : product));
-        return showToast("Produto vinculado a vendas foi marcado como inativo.");
+        showToast("Produto vinculado a vendas foi marcado como inativo.");
+        return;
       }
       setProducts((current) => current.filter((product) => product.id !== productId));
       showToast("Produto removido com sucesso.");
@@ -364,8 +326,13 @@ function App() {
   };
 
   const saveCustomer = async (form) => {
-    if (!form.name || !form.phone) return showToast("Preencha nome e telefone do cliente."), false;
+    if (!form.name || !form.phone) {
+      showToast("Preencha nome e telefone do cliente.");
+      return false;
+    }
+
     const customer = { ...form, id: form.id || getNextId(customers), status: form.status || "Novo" };
+
     try {
       if (usingDatabase) {
         if (form.id) {
@@ -390,20 +357,24 @@ function App() {
 
   const deleteCustomer = async (customerId) => {
     const customerHasSales = sales.some((sale) => sale.customerId === customerId);
+
     try {
       if (usingDatabase) {
         if (customerHasSales) {
           const { error } = await supabase.from("clientes").update({ status: "Inativo" }).eq("id", customerId);
           if (error) throw error;
           setCustomers((current) => current.map((customer) => customer.id === customerId ? { ...customer, status: "Inativo" } : customer));
-          return showToast("Cliente vinculado a vendas foi marcado como inativo.");
+          showToast("Cliente vinculado a vendas foi marcado como inativo.");
+          return;
         }
         const { error } = await supabase.from("clientes").delete().eq("id", customerId);
         if (error) throw error;
       }
+
       if (customerHasSales) {
         setCustomers((current) => current.map((customer) => customer.id === customerId ? { ...customer, status: "Inativo" } : customer));
-        return showToast("Cliente vinculado a vendas foi marcado como inativo.");
+        showToast("Cliente vinculado a vendas foi marcado como inativo.");
+        return;
       }
       setCustomers((current) => current.filter((customer) => customer.id !== customerId));
       showToast("Cliente removido com sucesso.");
@@ -417,7 +388,10 @@ function App() {
     if (product.stock <= 0) return showToast("Estoque insuficiente para este produto.");
     const existing = cart.find((item) => item.productId === product.id);
     if (existing && existing.qty + 1 > product.stock) return showToast("Quantidade maior que o estoque disponível.");
-    setCart((current) => existing ? current.map((item) => item.productId === product.id ? { ...item, qty: item.qty + 1 } : item) : [...current, { productId: product.id, name: product.name, qty: 1, price: product.price }]);
+    setCart((current) => existing
+      ? current.map((item) => item.productId === product.id ? { ...item, qty: item.qty + 1 } : item)
+      : [...current, { productId: product.id, name: product.name, qty: 1, price: product.price }]
+    );
   };
 
   const updateCartQty = (productId, qty) => {
@@ -434,13 +408,27 @@ function App() {
       return !product || product.status !== "Ativo" || product.stock < item.qty;
     });
     if (hasStockError) return showToast("Existe produto inativo ou com estoque insuficiente no carrinho.");
+
     const subtotal = cart.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0);
     const finalTotal = Math.max(subtotal - (Number(discount) || 0), 0);
     const paidValue = Number(amountPaid) || 0;
     if (payment === "Dinheiro" && paidValue < finalTotal) return showToast("Valor recebido em dinheiro é menor que o total da venda.");
+
     const customer = customers.find((item) => item.id === Number(customerId));
     const id = getNextId(sales, 1001);
-    const newSale = { id, date: today, customerId: customer?.id || null, customerName: customer?.name || "Cliente não informado", payment: payment || "PIX", discount: Number(discount) || 0, amountPaid: payment === "Dinheiro" ? paidValue : finalTotal, change: payment === "Dinheiro" ? Math.max(Number(change) || 0, 0) : 0, status: "Concluída", items: cart.map((item) => ({ ...item })) };
+    const newSale = {
+      id,
+      date: today,
+      customerId: customer?.id || null,
+      customerName: customer?.name || "Cliente não informado",
+      payment: payment || "PIX",
+      discount: Number(discount) || 0,
+      amountPaid: payment === "Dinheiro" ? paidValue : finalTotal,
+      change: payment === "Dinheiro" ? Math.max(Number(change) || 0, 0) : 0,
+      status: "Concluída",
+      items: cart.map((item) => ({ ...item })),
+    };
+
     const newMovements = cart.map((item, index) => ({ id: getNextId(movements) + index, date: today, productName: item.name, type: "Venda", qty: -item.qty, user: "Administrador" }));
     setSales((current) => [newSale, ...current]);
     setProducts((current) => current.map((product) => {
@@ -473,7 +461,10 @@ function App() {
     showToast(`Entrada de ${qty} unidades registrada.`);
   };
 
-  const handleNavigate = (key) => { setActive(key); setSidebarOpen(false); };
+  const handleNavigate = (key) => {
+    setActive(key);
+    setSidebarOpen(false);
+  };
 
   const renderContent = () => {
     if (active === "dashboard") return <Dashboard totalToday={totalToday} totalMonth={totalMonth} products={products} customers={customers} lowStock={lowStock} salesByDay={salesByDay} productSales={productSales} paymentData={paymentData} resetData={resetData} />;
@@ -487,25 +478,24 @@ function App() {
     return null;
   };
 
-  if (authLoading) {
-    return <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6"><div className="rounded-3xl bg-white p-8 shadow-sm border border-slate-100 text-center"><div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-blue-100 border-t-blue-700" /><p className="font-semibold text-slate-700">Carregando sistema...</p></div></div>;
-  }
-
-  if (!session) {
-    return <AuthScreen authMode={authMode} setAuthMode={setAuthMode} authForm={authForm} setAuthForm={setAuthForm} onLogin={handleLogin} onSignUp={handleSignUp} loading={authLoading} />;
+  if (!logged) {
+    return <LoginScreen onLogin={() => setLogged(true)} />;
   }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       {toast && <div className="fixed right-6 top-6 z-50 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white shadow-xl">{toast}</div>}
-      <Sidebar active={active} menuItems={visibleMenu} onNavigate={handleNavigate} onLogout={handleLogout} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar active={active} onNavigate={handleNavigate} onLogout={() => setLogged(false)} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <main className="lg:ml-72 p-4 md:p-8">
         <div className="mb-6 rounded-3xl bg-white p-4 shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden rounded-2xl border border-slate-200 p-3 text-slate-700"><Menu size={20} /></button>
-            <div><p className="text-sm text-slate-500">Projeto Integrador — UNIVESP</p><h2 className="font-bold text-slate-950">Painel administrativo para pequenos negócios</h2></div>
+            <div>
+              <p className="text-sm text-slate-500">Projeto Integrador — UNIVESP</p>
+              <h2 className="font-bold text-slate-950">Painel administrativo para pequenos negócios</h2>
+            </div>
           </div>
-          <div className="flex items-center gap-3"><Badge tone="green">{userProfile?.perfil || "Usuário"}</Badge><Badge tone={usingDatabase ? "green" : "blue"}>{usingDatabase ? "Banco Supabase conectado" : "Dados salvos localmente"}</Badge></div>
+          <div className="flex items-center gap-3"><Badge tone="green">Administrador</Badge><Badge tone={usingDatabase ? "green" : "blue"}>{usingDatabase ? "Banco Supabase conectado" : "Dados salvos localmente"}</Badge></div>
         </div>
         {renderContent()}
       </main>
@@ -513,14 +503,18 @@ function App() {
   );
 }
 
-function AuthScreen({ authMode, setAuthMode, authForm, setAuthForm, onLogin, onSignUp, loading }) {
-  const update = (key, value) => setAuthForm((current) => ({ ...current, [key]: value }));
-  const isLogin = authMode === "login";
+function LoginScreen({ onLogin }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-800 to-emerald-700 flex items-center justify-center p-6">
       <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl grid md:grid-cols-2">
-        <div className="p-10 bg-slate-950 text-white flex flex-col justify-between min-h-[560px]"><div><div className="flex items-center gap-3"><div className="rounded-2xl bg-emerald-500 p-3"><Building2 /></div><div><p className="text-sm text-blue-100">Projeto Integrador UNIVESP</p><h1 className="text-2xl font-bold">Gestão Comercial Integrada</h1></div></div><p className="mt-8 text-lg leading-relaxed text-slate-200">Sistema web com autenticação real, perfis de acesso, PDV, estoque, clientes, CRM e banco Supabase.</p></div><div className="grid grid-cols-2 gap-3 text-sm"><div className="rounded-2xl bg-white/10 p-4">Login real</div><div className="rounded-2xl bg-white/10 p-4">Cadastro de usuário</div><div className="rounded-2xl bg-white/10 p-4">Administrador</div><div className="rounded-2xl bg-white/10 p-4">Operador</div></div></div>
-        <div className="p-10 flex flex-col justify-center"><div className="mb-6 flex rounded-2xl bg-slate-100 p-1"><button onClick={() => setAuthMode("login")} className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold ${isLogin ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>Entrar</button><button onClick={() => setAuthMode("signup")} className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold ${!isLogin ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>Criar conta</button></div><h2 className="text-3xl font-bold text-slate-950">{isLogin ? "Entrar no sistema" : "Cadastrar usuário"}</h2><p className="mt-2 text-slate-500">{isLogin ? "Acesse com e-mail e senha cadastrados no Supabase." : "Crie um usuário e defina o perfil de acesso."}</p><div className="mt-8 space-y-4">{!isLogin && <Input label="Nome" value={authForm.name} onChange={(e) => update("name", e.target.value)} placeholder="Nome do usuário" />}<Input label="E-mail" value={authForm.email} onChange={(e) => update("email", e.target.value)} placeholder="email@exemplo.com" /><Input label="Senha" type="password" value={authForm.password} onChange={(e) => update("password", e.target.value)} placeholder="Mínimo 6 caracteres" />{!isLogin && <Select label="Perfil" value={authForm.profile} onChange={(e) => update("profile", e.target.value)}><option>Administrador</option><option>Operador</option></Select>}<button onClick={isLogin ? onLogin : onSignUp} disabled={loading} className="w-full rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2">{isLogin ? <LogIn size={18} /> : <UserPlus size={18} />}{loading ? "Aguarde..." : isLogin ? "Entrar" : "Criar conta"}</button></div></div>
+        <div className="p-10 bg-slate-950 text-white flex flex-col justify-between min-h-[520px]">
+          <div>
+            <div className="flex items-center gap-3"><div className="rounded-2xl bg-emerald-500 p-3"><Building2 /></div><div><p className="text-sm text-blue-100">Projeto Integrador UNIVESP</p><h1 className="text-2xl font-bold">Gestão Comercial Integrada</h1></div></div>
+            <p className="mt-8 text-lg leading-relaxed text-slate-200">Sistema web com PDV, estoque, clientes, CRM, relatórios e integração com banco Supabase para produtos e clientes.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm"><div className="rounded-2xl bg-white/10 p-4">PDV funcional</div><div className="rounded-2xl bg-white/10 p-4">Banco Supabase</div><div className="rounded-2xl bg-white/10 p-4">Clientes e CRM</div><div className="rounded-2xl bg-white/10 p-4">Relatórios</div></div>
+        </div>
+        <div className="p-10 flex flex-col justify-center"><h2 className="text-3xl font-bold text-slate-950">Entrar no sistema</h2><p className="mt-2 text-slate-500">Acesso administrativo para apresentação acadêmica.</p><div className="mt-8 space-y-4"><Input label="E-mail" defaultValue="admin@demo.com" /><Input label="Senha" type="password" defaultValue="123456" /><button onClick={onLogin} className="w-full rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 flex items-center justify-center gap-2"><LogIn size={18} /> Entrar</button></div></div>
       </motion.div>
     </div>
   );
@@ -543,8 +537,8 @@ function Badge({ children, tone = "blue" }) {
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${styles[tone] || styles.blue}`}>{children}</span>;
 }
 
-function Sidebar({ active, menuItems, onNavigate, onLogout, open, onClose }) {
-  return <>{open && <button aria-label="Fechar menu" onClick={onClose} className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" />}<aside className={`fixed left-0 top-0 z-40 h-full w-72 bg-slate-950 text-white p-5 flex flex-col transition-transform duration-300 ${open ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}><div className="flex items-center justify-between border-b border-white/10 pb-5"><div className="flex items-center gap-3"><div className="rounded-2xl bg-emerald-500 p-3"><Building2 size={22} /></div><div><p className="text-xs text-blue-100">Sistema Web</p><h2 className="font-bold leading-tight">Gestão Comercial Integrada</h2></div></div><button onClick={onClose} className="lg:hidden rounded-xl p-2 hover:bg-white/10"><X size={18} /></button></div><nav className="mt-6 space-y-2 flex-1">{menuItems.map((item) => { const Icon = item.icon; return <button key={item.key} onClick={() => onNavigate(item.key)} className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${active === item.key ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/10"}`}><Icon size={18} /> {item.label}</button>; })}</nav><button onClick={onLogout} className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-300 hover:bg-white/10"><LogOut size={18} /> Sair</button></aside></>;
+function Sidebar({ active, onNavigate, onLogout, open, onClose }) {
+  return <>{open && <button aria-label="Fechar menu" onClick={onClose} className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" />}<aside className={`fixed left-0 top-0 z-40 h-full w-72 bg-slate-950 text-white p-5 flex flex-col transition-transform duration-300 ${open ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}><div className="flex items-center justify-between border-b border-white/10 pb-5"><div className="flex items-center gap-3"><div className="rounded-2xl bg-emerald-500 p-3"><Building2 size={22} /></div><div><p className="text-xs text-blue-100">Sistema Web</p><h2 className="font-bold leading-tight">Gestão Comercial Integrada</h2></div></div><button onClick={onClose} className="lg:hidden rounded-xl p-2 hover:bg-white/10"><X size={18} /></button></div><nav className="mt-6 space-y-2 flex-1">{menu.map((item) => { const Icon = item.icon; return <button key={item.key} onClick={() => onNavigate(item.key)} className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${active === item.key ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/10"}`}><Icon size={18} /> {item.label}</button>; })}</nav><button onClick={onLogout} className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-300 hover:bg-white/10"><LogOut size={18} /> Sair</button></aside></>;
 }
 
 function SectionTitle({ title, subtitle, actions }) {
