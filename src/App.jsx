@@ -82,14 +82,13 @@ const initialMovements = [
 ];
 
 const menu = [
-  { key: "dashboard", label: "Dashboard", icon: Home },
+  { key: "dashboard", label: "Dashboard Gerencial", icon: Home },
   { key: "products", label: "Produtos", icon: Package },
   { key: "stock", label: "Estoque", icon: Boxes },
   { key: "pdv", label: "PDV", icon: ShoppingCart },
   { key: "customers", label: "Clientes", icon: Users },
   { key: "crm", label: "CRM", icon: UserRound },
   { key: "sales", label: "Vendas", icon: Receipt },
-  { key: "reports", label: "Relatórios", icon: FileText },
 ];
 
 const emptyProduct = { name: "", sku: "", category: "", description: "", cost: "", price: "", stock: "", minStock: "", status: "Ativo" };
@@ -583,14 +582,13 @@ function App() {
   };
 
   const renderContent = () => {
-    if (active === "dashboard") return <Dashboard totalToday={totalToday} totalMonth={totalMonth} products={products} customers={customers} lowStock={lowStock} salesByDay={salesByDay} productSales={productSales} paymentData={paymentData} resetData={resetData} />;
+    if (active === "dashboard") return <Dashboard sales={sales} products={products} customers={customers} lowStock={lowStock} resetData={resetData} />;
     if (active === "products") return <Products products={products} saveProduct={saveProduct} deleteProduct={deleteProduct} exportProducts={exportProducts} importProducts={importProducts} />;
     if (active === "stock") return <Stock products={products} movements={movements} addStock={addStock} />;
     if (active === "pdv") return <PDV products={products} customers={customers} cart={cart} addToCart={addToCart} updateCartQty={updateCartQty} removeFromCart={(id) => setCart((current) => current.filter((item) => item.productId !== id))} finishSale={finishSale} cartTotal={cartTotal} />;
     if (active === "customers") return <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} sales={sales} exportCustomers={exportCustomers} importCustomers={importCustomers} />;
     if (active === "crm") return <CRM customers={customers} sales={sales} />;
     if (active === "sales") return <Sales sales={sales} cancelSale={cancelSale} />;
-    if (active === "reports") return <Reports sales={sales} products={products} customers={customers} productSales={productSales} paymentData={paymentData} salesByDay={salesByDay} />;
     return null;
   };
 
@@ -766,8 +764,75 @@ function ChartCard({ title, children }) {
   return <div className="rounded-[1.75rem] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.07)] backdrop-blur"><div className="mb-5 flex items-center justify-between"><h3 className="font-black text-slate-950">{title}</h3><span className="h-2 w-2 rounded-full bg-emerald-500" /></div>{children}</div>;
 }
 
-function Dashboard({ totalToday, totalMonth, products, customers, lowStock, salesByDay, productSales, paymentData, resetData }) {
-  return <div><SectionTitle title="Dashboard" subtitle="Visão geral das vendas, estoque, clientes e indicadores comerciais." actions={<button onClick={resetData} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><RotateCcw size={16} /> Restaurar dados</button>} /><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><StatCard title="Vendas do dia" value={currency(totalToday)} icon={Wallet} caption="Atualizado em tempo real" /><StatCard title="Vendas do mês" value={currency(totalMonth)} icon={CreditCard} caption="Total de vendas concluídas" /><StatCard title="Produtos cadastrados" value={products.length} icon={Package} caption="Produtos ativos e inativos" /><StatCard title="Clientes cadastrados" value={customers.length} icon={Users} caption="Base de relacionamento" /></div><div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4"><StatCard title="Baixo estoque" value={lowStock.length} icon={Boxes} caption="Itens abaixo do mínimo" /><StatCard title="Valor em estoque" value={currency(products.reduce((sum, product) => sum + product.stock * product.cost, 0))} icon={BarChart3} caption="Custo estimado" /></div><div className="mt-6 grid gap-5 xl:grid-cols-2"><ChartCard title="Vendas por dia"><ResponsiveContainer width="100%" height={260}><BarChart data={salesByDay}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip formatter={(value) => currency(value)} /><Bar dataKey="total" fill="#2563eb" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard><ChartCard title="Produtos mais vendidos"><ResponsiveContainer width="100%" height={260}><BarChart data={productSales}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis /><Tooltip /><Bar dataKey="qty" fill="#059669" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard></div><div className="mt-6 grid gap-5 xl:grid-cols-2"><ChartCard title="Formas de pagamento"><ResponsiveContainer width="100%" height={260}><PieChart><Pie data={paymentData} dataKey="value" nameKey="name" outerRadius={90} label>{paymentData.map((entry, index) => <Cell key={entry.name} fill={chartColors[index % chartColors.length]} />)}</Pie><Tooltip formatter={(value) => currency(value)} /></PieChart></ResponsiveContainer></ChartCard><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold text-slate-950">Alertas de estoque</h3><div className="mt-4 space-y-3">{lowStock.length === 0 && <p className="text-sm text-slate-400">Nenhum produto abaixo do estoque mínimo.</p>}{lowStock.map((product) => <div key={product.id} className="flex items-center justify-between rounded-2xl bg-amber-50 p-4"><span>{product.name}</span><Badge tone="amber">{product.stock} un.</Badge></div>)}</div></div></div></div>;
+function Dashboard({ sales, products, customers, lowStock, resetData }) {
+  const [period, setPeriod] = useState("all");
+
+  const filteredSales = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const sevenDaysAgo = new Date(startOfToday);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    return sales.filter((sale) => {
+      const saleDate = new Date(`${sale.date}T00:00:00`);
+      if (period === "today") return saleDate >= startOfToday;
+      if (period === "7days") return saleDate >= sevenDaysAgo;
+      if (period === "month") return saleDate >= startOfMonth;
+      return true;
+    });
+  }, [sales, period]);
+
+  const completedSales = filteredSales.filter((sale) => sale.status === "Concluída");
+  const canceledSales = filteredSales.filter((sale) => sale.status === "Cancelada");
+  const total = completedSales.reduce((sum, sale) => sum + getSaleTotal(sale), 0);
+  const totalToday = sales.filter((sale) => sale.date === today && sale.status === "Concluída").reduce((sum, sale) => sum + getSaleTotal(sale), 0);
+  const totalMonth = sales.filter((sale) => sale.status === "Concluída").reduce((sum, sale) => sum + getSaleTotal(sale), 0);
+  const ticketMedio = completedSales.length ? total / completedSales.length : 0;
+  const valorEmEstoque = products.reduce((sum, product) => sum + product.stock * product.cost, 0);
+
+  const productMap = {};
+  completedSales.forEach((sale) => {
+    sale.items.forEach((item) => {
+      productMap[item.name] = (productMap[item.name] || 0) + Number(item.qty);
+    });
+  });
+  const produtoMaisVendido = Object.entries(productMap).sort((a, b) => b[1] - a[1])[0];
+
+  const customerMap = {};
+  completedSales.forEach((sale) => {
+    const name = sale.customerName || "Cliente não informado";
+    customerMap[name] = (customerMap[name] || 0) + getSaleTotal(sale);
+  });
+  const clienteMaisComprou = Object.entries(customerMap).sort((a, b) => b[1] - a[1])[0];
+
+  const salesByDay = useMemo(() => {
+    const dayMap = {};
+    completedSales.forEach((sale) => {
+      dayMap[sale.date.slice(5)] = (dayMap[sale.date.slice(5)] || 0) + getSaleTotal(sale);
+    });
+    return Object.entries(dayMap).map(([date, total]) => ({ date, total })).sort((a, b) => a.date.localeCompare(b.date));
+  }, [completedSales]);
+
+  const productSales = useMemo(() => {
+    return Object.entries(productMap).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty).slice(0, 6);
+  }, [completedSales]);
+
+  const paymentData = useMemo(() => {
+    const paymentMap = {};
+    completedSales.forEach((sale) => {
+      paymentMap[sale.payment] = (paymentMap[sale.payment] || 0) + getSaleTotal(sale);
+    });
+    return Object.entries(paymentMap).map(([name, value]) => ({ name, value }));
+  }, [completedSales]);
+
+  const produtosComMargem = products.map((product) => {
+    const lucro = Number(product.price) - Number(product.cost);
+    const margem = Number(product.price) > 0 ? (lucro / Number(product.price)) * 100 : 0;
+    return { ...product, lucro, margem };
+  }).sort((a, b) => b.margem - a.margem).slice(0, 5);
+
+  return <div><SectionTitle title="Dashboard Gerencial" subtitle="Centralização dos principais indicadores de vendas, estoque, clientes, pagamentos, ticket médio e margem de lucro." actions={<div className="flex flex-col gap-3 sm:flex-row"><Select label="Período" value={period} onChange={(e) => setPeriod(e.target.value)}><option value="all">Todas as vendas</option><option value="today">Hoje</option><option value="7days">Últimos 7 dias</option><option value="month">Este mês</option></Select><button onClick={resetData} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center justify-center gap-2"><RotateCcw size={16} /> Restaurar dados</button></div>} /><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><StatCard title="Receita filtrada" value={currency(total)} icon={Wallet} caption="Vendas concluídas no período" /><StatCard title="Vendas do dia" value={currency(totalToday)} icon={CreditCard} caption="Indicador operacional diário" /><StatCard title="Vendas do mês" value={currency(totalMonth)} icon={BarChart3} caption="Total geral concluído" /><StatCard title="Ticket médio" value={currency(ticketMedio)} icon={Receipt} caption="Receita ÷ vendas concluídas" /></div><div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4"><StatCard title="Vendas concluídas" value={completedSales.length} icon={Receipt} caption="No período selecionado" /><StatCard title="Vendas canceladas" value={canceledSales.length} icon={X} caption="Controle operacional" /><StatCard title="Produtos cadastrados" value={products.length} icon={Package} caption="Produtos ativos e inativos" /><StatCard title="Clientes cadastrados" value={customers.length} icon={Users} caption="Base de relacionamento" /></div><div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4"><StatCard title="Baixo estoque" value={lowStock.length} icon={Boxes} caption="Itens abaixo do mínimo" /><StatCard title="Valor em estoque" value={currency(valorEmEstoque)} icon={BarChart3} caption="Custo estimado" /><StatCard title="Produto destaque" value={produtoMaisVendido ? produtoMaisVendido[0] : "Sem vendas"} icon={Package} caption={produtoMaisVendido ? `${produtoMaisVendido[1]} unidade(s)` : "Nenhum produto vendido"} /><StatCard title="Cliente destaque" value={clienteMaisComprou ? clienteMaisComprou[0] : "Sem cliente"} icon={UserRound} caption={clienteMaisComprou ? currency(clienteMaisComprou[1]) : "Nenhuma compra"} /></div><div className="mt-6 grid gap-5 xl:grid-cols-2"><ChartCard title="Vendas por período"><ResponsiveContainer width="100%" height={270}><BarChart data={salesByDay}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip formatter={(value) => currency(value)} /><Bar dataKey="total" fill="#2563eb" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard><ChartCard title="Produtos mais vendidos"><ResponsiveContainer width="100%" height={270}><BarChart data={productSales}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis /><Tooltip /><Bar dataKey="qty" fill="#059669" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard></div><div className="mt-6 grid gap-5 xl:grid-cols-2"><ChartCard title="Formas de pagamento"><ResponsiveContainer width="100%" height={260}><PieChart><Pie data={paymentData} dataKey="value" nameKey="name" outerRadius={90} label>{paymentData.map((entry, index) => <Cell key={entry.name} fill={chartColors[index % chartColors.length]} />)}</Pie><Tooltip formatter={(value) => currency(value)} /></PieChart></ResponsiveContainer></ChartCard><div className="rounded-[1.75rem] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.07)] backdrop-blur"><h3 className="mb-4 font-black text-slate-950">Alertas de estoque</h3><div className="space-y-3">{lowStock.length === 0 && <p className="text-sm text-slate-400">Nenhum produto abaixo do estoque mínimo.</p>}{lowStock.map((product) => <div key={product.id} className="flex items-center justify-between rounded-2xl bg-amber-50 p-4"><span>{product.name}</span><Badge tone="amber">{product.stock} un.</Badge></div>)}</div></div></div><div className="mt-6 grid gap-5 xl:grid-cols-2"><div className="rounded-[1.75rem] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.07)]"><h3 className="mb-4 font-black text-slate-950">Margem de lucro dos produtos</h3><div className="space-y-3">{produtosComMargem.map((product) => <div key={product.id} className="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><div><b>{product.name}</b><p className="text-xs text-slate-500">Custo {currency(product.cost)} • Venda {currency(product.price)}</p></div><Badge tone={product.lucro >= 0 ? "green" : "red"}>{currency(product.lucro)} • {product.margem.toFixed(1)}%</Badge></div>)}</div></div><div className="rounded-[1.75rem] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.07)]"><h3 className="font-black mb-4 text-slate-950">Resumo por pagamento</h3><div className="grid gap-3 md:grid-cols-2">{paymentData.map((payment) => <div key={payment.name} className="rounded-2xl bg-slate-50 p-4"><p className="text-sm text-slate-500">{payment.name}</p><b>{currency(payment.value)}</b></div>)}{paymentData.length === 0 && <p className="text-sm text-slate-400">Nenhuma venda concluída no período selecionado.</p>}</div></div></div></div>;
 }
 
 function Toolbar({ query, setQuery, placeholder, button, onClick }) {
