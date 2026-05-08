@@ -216,30 +216,93 @@ function App() {
   };
 
   const handleLogin = async () => {
-    if (!authForm.email || !authForm.password) return showToast("Informe e-mail e senha.");
-    setAuthLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: authForm.email, password: authForm.password });
-    setAuthLoading(false);
-    if (error) return showToast("Não foi possível entrar. Confira e-mail e senha.");
-    showToast("Login realizado com sucesso.");
-  };
+  if (!authForm.email || !authForm.password) {
+    showToast("Informe e-mail e senha.");
+    return;
+  }
 
-  const handleSignUp = async () => {
-    if (!authForm.name || !authForm.email || !authForm.password) return showToast("Preencha nome, e-mail e senha.");
-    if (authForm.password.length < 6) return showToast("A senha precisa ter pelo menos 6 caracteres.");
-    setAuthLoading(true);
-    const { data, error } = await supabase.auth.signUp({ email: authForm.email, password: authForm.password });
-    if (error) {
-      setAuthLoading(false);
-      return showToast("Não foi possível criar o usuário.");
-    }
-    if (data.user?.id) {
-      await supabase.from("perfis").upsert({ id: data.user.id, nome: authForm.name, perfil: authForm.profile });
-    }
+  setAuthLoading(true);
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: authForm.email,
+    password: authForm.password,
+  });
+
+  if (error) {
     setAuthLoading(false);
-    showToast("Usuário cadastrado. Se necessário, confirme o e-mail antes de entrar.");
-    setAuthMode("login");
-  };
+
+    if (error.message?.toLowerCase().includes("email not confirmed")) {
+      showToast("E-mail ainda não confirmado. Confirme no Supabase ou desative confirmação de e-mail.");
+      return;
+    }
+
+    showToast("Não foi possível entrar. Confira e-mail e senha.");
+    return;
+  }
+
+  if (data.session) {
+    setSession(data.session);
+
+    if (data.user?.id) {
+      await carregarPerfil(data.user.id);
+    }
+
+    setAuthLoading(false);
+    showToast("Login realizado com sucesso.");
+    return;
+  }
+
+  setAuthLoading(false);
+  showToast("Login realizado, mas a sessão não foi carregada.");
+};
+  const handleSignUp = async () => {
+  if (!authForm.name || !authForm.email || !authForm.password) {
+    showToast("Preencha nome, e-mail e senha.");
+    return;
+  }
+
+  if (authForm.password.length < 6) {
+    showToast("A senha precisa ter pelo menos 6 caracteres.");
+    return;
+  }
+
+  setAuthLoading(true);
+
+  const { data, error } = await supabase.auth.signUp({
+    email: authForm.email,
+    password: authForm.password,
+    options: {
+      data: {
+        nome: authForm.name,
+        perfil: authForm.profile,
+      },
+    },
+  });
+
+  if (error) {
+    setAuthLoading(false);
+    showToast("Não foi possível criar o usuário. Verifique se o e-mail já está cadastrado.");
+    return;
+  }
+
+  if (data.user?.id) {
+    const { error: profileError } = await supabase.from("perfis").upsert({
+      id: data.user.id,
+      nome: authForm.name,
+      perfil: authForm.profile,
+    });
+
+    if (profileError) {
+      setAuthLoading(false);
+      showToast("Usuário criado, mas houve erro ao salvar o perfil.");
+      return;
+    }
+  }
+
+  setAuthLoading(false);
+  setAuthMode("login");
+  showToast("Usuário cadastrado com sucesso. Agora entre com e-mail e senha.");
+};
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
