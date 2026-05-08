@@ -169,6 +169,71 @@ function clienteParaBanco(cliente) {
   };
 }
 
+function vendaParaBanco(venda) {
+  return {
+    cliente_id: venda.customerId || null,
+    cliente_nome: venda.customerName || "Cliente não informado",
+    forma_pagamento: venda.payment,
+    desconto: Number(venda.discount) || 0,
+    valor_recebido: Number(venda.amountPaid) || 0,
+    troco: Number(venda.change) || 0,
+    total: getSaleTotal(venda),
+    status: venda.status || "Concluída",
+  };
+}
+
+function vendaDoBanco(venda, itens = []) {
+  return {
+    id: venda.id,
+    date: venda.criado_em ? venda.criado_em.slice(0, 10) : today,
+    customerId: venda.cliente_id || null,
+    customerName: venda.cliente_nome || "Cliente não informado",
+    payment: venda.forma_pagamento,
+    discount: Number(venda.desconto) || 0,
+    amountPaid: Number(venda.valor_recebido) || 0,
+    change: Number(venda.troco) || 0,
+    status: venda.status || "Concluída",
+    items: itens.map((item) => ({
+      productId: item.produto_id,
+      name: item.produto_nome,
+      qty: Number(item.quantidade) || 0,
+      price: Number(item.preco_unitario) || 0,
+    })),
+  };
+}
+
+function itemVendaParaBanco(item, vendaId) {
+  return {
+    venda_id: vendaId,
+    produto_id: item.productId,
+    produto_nome: item.name,
+    quantidade: Number(item.qty) || 0,
+    preco_unitario: Number(item.price) || 0,
+    subtotal: Number(item.qty) * Number(item.price),
+  };
+}
+
+function movimentoDoBanco(movimento) {
+  return {
+    id: movimento.id,
+    date: movimento.criado_em ? movimento.criado_em.slice(0, 10) : today,
+    productName: movimento.produto_nome,
+    type: movimento.tipo,
+    qty: Number(movimento.quantidade) || 0,
+    user: movimento.usuario || "Administrador",
+  };
+}
+
+function movimentoParaBanco(movimento, produtoId = null) {
+  return {
+    produto_id: produtoId,
+    produto_nome: movimento.productName,
+    tipo: movimento.type,
+    quantidade: Number(movimento.qty) || 0,
+    usuario: movimento.user || "Administrador",
+  };
+}
+
 function baixarJson(nomeArquivo, dados) {
   const blob = new Blob([JSON.stringify(dados, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -252,18 +317,26 @@ function App() {
   useEffect(() => {
     async function carregarDadosDoBanco() {
       try {
-        const [produtosResposta, clientesResposta] = await Promise.all([
+        const [produtosResposta, clientesResposta, vendasResposta, itensResposta, movimentosResposta] = await Promise.all([
           supabase.from("produtos").select("*").order("id", { ascending: true }),
           supabase.from("clientes").select("*").order("id", { ascending: true }),
+          supabase.from("vendas").select("*").order("id", { ascending: false }),
+          supabase.from("itens_venda").select("*"),
+          supabase.from("movimentacoes_estoque").select("*").order("id", { ascending: false }),
         ]);
 
         if (produtosResposta.error) throw produtosResposta.error;
         if (clientesResposta.error) throw clientesResposta.error;
+        if (vendasResposta.error) throw vendasResposta.error;
+        if (itensResposta.error) throw itensResposta.error;
+        if (movimentosResposta.error) throw movimentosResposta.error;
 
         if (produtosResposta.data?.length) setProducts(produtosResposta.data.map(produtoDoBanco));
         if (clientesResposta.data?.length) setCustomers(clientesResposta.data.map(clienteDoBanco));
+        setSales((vendasResposta.data || []).map((venda) => vendaDoBanco(venda, (itensResposta.data || []).filter((item) => item.venda_id === venda.id))));
+        setMovements((movimentosResposta.data || []).map(movimentoDoBanco));
         setUsingDatabase(true);
-        showToast("Produtos e clientes carregados do banco Supabase.");
+        showToast("Dados carregados do banco Supabase.");
       } catch {
         setUsingDatabase(false);
         showToast("Banco não conectado. Usando dados locais do navegador.");
@@ -461,7 +534,7 @@ function App() {
     setCart((current) => current.map((item) => item.productId === productId ? { ...item, qty: safeQty } : item));
   };
 
-  const finishSale = ({ customerId, payment, discount, amountPaid, change }) => {
+  const finishSale = async ({ customerId, payment, discount, amountPaid, change }) => {
     if (!cart.length) return showToast("Adicione produtos ao carrinho antes de finalizar.");
     const hasStockError = cart.some((item) => {
       const product = products.find((currentProduct) => currentProduct.id === item.productId);
@@ -475,9 +548,8 @@ function App() {
     if (payment === "Dinheiro" && paidValue < finalTotal) return showToast("Valor recebido em dinheiro é menor que o total da venda.");
 
     const customer = customers.find((item) => item.id === Number(customerId));
-    const id = getNextId(sales, 1001);
-    const newSale = {
-      id,
+    let newSale = {
+      id: getNextId(sales, 1001),
       date: today,
       customerId: customer?.id || null,
       customerName: customer?.name || "Cliente não informado",
@@ -489,37 +561,113 @@ function App() {
       items: cart.map((item) => ({ ...item })),
     };
 
-    const newMovements = cart.map((item, index) => ({ id: getNextId(movements) + index, date: today, productName: item.name, type: "Venda", qty: -item.qty, user: "Administrador" }));
-    setSales((current) => [newSale, ...current]);
-    setProducts((current) => current.map((product) => {
-      const sold = cart.find((item) => item.productId === product.id);
-      return sold ? { ...product, stock: product.stock - sold.qty } : product;
+    const newMovements = cart.map((item, index) => ({
+      id: getNextId(movements) + index,
+      date: today,
+      productName: item.name,
+      type: "Venda",
+      qty: -item.qty,
+      user: "Administrador",
     }));
-    setMovements((current) => [...newMovements, ...current]);
-    setCart([]);
-    setLastReceipt(newSale);
-    showToast("Venda finalizada e estoque atualizado automaticamente.");
+
+    try {
+      if (usingDatabase) {
+        const { data: vendaCriada, error: vendaError } = await supabase.from("vendas").insert(vendaParaBanco(newSale)).select().single();
+        if (vendaError) throw vendaError;
+
+        const itensBanco = cart.map((item) => itemVendaParaBanco(item, vendaCriada.id));
+        const { data: itensCriados, error: itensError } = await supabase.from("itens_venda").insert(itensBanco).select();
+        if (itensError) throw itensError;
+
+        const movimentosBanco = cart.map((item) => movimentoParaBanco({ productName: item.name, type: "Venda", qty: -item.qty, user: "Administrador" }, item.productId));
+        const { data: movimentosCriados, error: movimentosError } = await supabase.from("movimentacoes_estoque").insert(movimentosBanco).select();
+        if (movimentosError) throw movimentosError;
+
+        await Promise.all(cart.map((item) => {
+          const product = products.find((currentProduct) => currentProduct.id === item.productId);
+          return supabase.from("produtos").update({ estoque: Number(product.stock) - Number(item.qty) }).eq("id", item.productId);
+        }));
+
+        newSale = vendaDoBanco(vendaCriada, itensCriados || []);
+        newMovements.splice(0, newMovements.length, ...(movimentosCriados || []).map(movimentoDoBanco));
+      }
+
+      setSales((current) => [newSale, ...current]);
+      setProducts((current) => current.map((product) => {
+        const sold = cart.find((item) => item.productId === product.id);
+        return sold ? { ...product, stock: product.stock - sold.qty } : product;
+      }));
+      setMovements((current) => [...newMovements, ...current]);
+      setCart([]);
+      setLastReceipt(newSale);
+      showToast("Venda finalizada e estoque atualizado automaticamente.");
+    } catch {
+      showToast("Não foi possível salvar a venda no Supabase.");
+    }
   };
 
-  const cancelSale = (sale) => {
+  const cancelSale = async (sale) => {
     if (sale.status === "Cancelada") return;
-    const newMovements = sale.items.map((item, index) => ({ id: getNextId(movements) + index, date: today, productName: item.name, type: "Cancelamento", qty: item.qty, user: "Administrador" }));
-    setSales((current) => current.map((currentSale) => currentSale.id === sale.id ? { ...currentSale, status: "Cancelada" } : currentSale));
-    setProducts((current) => current.map((product) => {
-      const item = sale.items.find((saleItem) => saleItem.productId === product.id);
-      return item ? { ...product, stock: product.stock + item.qty } : product;
+    const newMovements = sale.items.map((item, index) => ({
+      id: getNextId(movements) + index,
+      date: today,
+      productName: item.name,
+      type: "Cancelamento",
+      qty: item.qty,
+      user: "Administrador",
     }));
-    setMovements((current) => [...newMovements, ...current]);
-    showToast("Venda cancelada e itens devolvidos ao estoque.");
+
+    try {
+      if (usingDatabase) {
+        const { error: vendaError } = await supabase.from("vendas").update({ status: "Cancelada" }).eq("id", sale.id);
+        if (vendaError) throw vendaError;
+
+        const movimentosBanco = sale.items.map((item) => movimentoParaBanco({ productName: item.name, type: "Cancelamento", qty: item.qty, user: "Administrador" }, item.productId));
+        const { data: movimentosCriados, error: movimentosError } = await supabase.from("movimentacoes_estoque").insert(movimentosBanco).select();
+        if (movimentosError) throw movimentosError;
+
+        await Promise.all(sale.items.map((item) => {
+          const product = products.find((currentProduct) => currentProduct.id === item.productId);
+          return supabase.from("produtos").update({ estoque: Number(product?.stock || 0) + Number(item.qty) }).eq("id", item.productId);
+        }));
+
+        newMovements.splice(0, newMovements.length, ...(movimentosCriados || []).map(movimentoDoBanco));
+      }
+
+      setSales((current) => current.map((currentSale) => currentSale.id === sale.id ? { ...currentSale, status: "Cancelada" } : currentSale));
+      setProducts((current) => current.map((product) => {
+        const item = sale.items.find((saleItem) => saleItem.productId === product.id);
+        return item ? { ...product, stock: product.stock + item.qty } : product;
+      }));
+      setMovements((current) => [...newMovements, ...current]);
+      showToast("Venda cancelada e itens devolvidos ao estoque.");
+    } catch {
+      showToast("Não foi possível cancelar a venda no Supabase.");
+    }
   };
 
-  const addStock = (product, amount = 5) => {
+  const addStock = async (product, amount = 5) => {
     const qty = Number(amount) || 0;
     if (qty <= 0) return showToast("Informe uma quantidade válida.");
     const movement = { id: getNextId(movements), date: today, productName: product.name, type: "Entrada", qty, user: "Administrador" };
-    setProducts((current) => current.map((currentProduct) => currentProduct.id === product.id ? { ...currentProduct, stock: currentProduct.stock + qty } : currentProduct));
-    setMovements((current) => [movement, ...current]);
-    showToast(`Entrada de ${qty} unidades registrada.`);
+
+    try {
+      if (usingDatabase) {
+        const { error: produtoError } = await supabase.from("produtos").update({ estoque: Number(product.stock) + qty }).eq("id", product.id);
+        if (produtoError) throw produtoError;
+
+        const { data: movimentoCriado, error: movimentoError } = await supabase.from("movimentacoes_estoque").insert(movimentoParaBanco(movement, product.id)).select().single();
+        if (movimentoError) throw movimentoError;
+        movement.id = movimentoCriado.id;
+        movement.date = movimentoCriado.criado_em ? movimentoCriado.criado_em.slice(0, 10) : today;
+      }
+
+      setProducts((current) => current.map((currentProduct) => currentProduct.id === product.id ? { ...currentProduct, stock: currentProduct.stock + qty } : currentProduct));
+      setMovements((current) => [movement, ...current]);
+      showToast(`Entrada de ${qty} unidades registrada.`);
+    } catch {
+      showToast("Não foi possível registrar a entrada no Supabase.");
+    }
   };
 
   const exportProducts = () => {
