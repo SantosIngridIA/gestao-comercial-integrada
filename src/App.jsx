@@ -22,6 +22,7 @@ import {
   Search,
   ShoppingCart,
   Trash2,
+  Truck,
   Upload,
   UserRound,
   Users,
@@ -70,6 +71,11 @@ const initialCustomers = [
   { id: 5, name: "Marina Costa", document: "", phone: "(11) 99999-1005", email: "marina@email.com", address: "São Paulo - SP", birthday: "", notes: "Gosta de promoções", status: "Recorrente" },
 ];
 
+const initialSuppliers = [
+  { id: 1, name: "Distribuidora São Paulo", document: "12.345.678/0001-90", phone: "(11) 3333-1000", email: "contato@distribuidorasp.com", category: "Atacado", suppliedItems: "Bebidas, alimentos e descartáveis", address: "São Paulo - SP", notes: "Fornecedor principal para reposição de estoque", status: "Ativo" },
+  { id: 2, name: "Tech Import Soluções", document: "98.765.432/0001-10", phone: "(11) 4444-2000", email: "vendas@techimport.com", category: "Eletrônicos", suppliedItems: "Carregadores, cabos e acessórios", address: "São Paulo - SP", notes: "Consultar prazo de entrega antes de comprar", status: "Ativo" },
+];
+
 const initialSales = [
   { id: 1001, date: today, customerId: 1, customerName: "Ana Souza", payment: "PIX", discount: 0, amountPaid: 0, change: 0, status: "Concluída", items: [{ productId: 1, name: "Camiseta Básica", qty: 2, price: 39.9 }, { productId: 9, name: "Chocolate", qty: 1, price: 8.9 }] },
   { id: 1002, date: today, customerId: 2, customerName: "Carlos Lima", payment: "Dinheiro", discount: 5, amountPaid: 60, change: 15.1, status: "Concluída", items: [{ productId: 10, name: "Carregador USB", qty: 1, price: 49.9 }] },
@@ -87,12 +93,14 @@ const menu = [
   { key: "stock", label: "Estoque", icon: Boxes },
   { key: "pdv", label: "PDV", icon: ShoppingCart },
   { key: "customers", label: "Clientes", icon: Users },
+  { key: "suppliers", label: "Fornecedores", icon: Truck },
   { key: "crm", label: "CRM", icon: UserRound },
   { key: "sales", label: "Vendas", icon: Receipt },
 ];
 
 const emptyProduct = { name: "", sku: "", category: "", description: "", cost: "", price: "", stock: "", minStock: "", status: "Ativo" };
 const emptyCustomer = { name: "", document: "", phone: "", email: "", address: "", birthday: "", notes: "", status: "Novo" };
+const emptySupplier = { name: "", document: "", phone: "", email: "", category: "", suppliedItems: "", address: "", notes: "", status: "Ativo" };
 
 function getNextId(items, fallback = 1) {
   if (!items.length) return fallback;
@@ -234,8 +242,38 @@ function movimentoParaBanco(movimento, produtoId = null) {
   };
 }
 
-function baixarJson(nomeArquivo, dados) {
-  const blob = new Blob([JSON.stringify(dados, null, 2)], { type: "application/json" });
+function escaparXml(valor) {
+  return String(valor ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function baixarExcelXml(nomeArquivo, nomePlanilha, colunas, linhas) {
+  const cabecalho = colunas.map((coluna) => `<Cell><Data ss:Type="String">${escaparXml(coluna.label)}</Data></Cell>`).join("");
+  const corpo = linhas.map((linha) => {
+    const cells = colunas.map((coluna) => `<Cell><Data ss:Type="String">${escaparXml(linha[coluna.key])}</Data></Cell>`).join("");
+    return `<Row>${cells}</Row>`;
+  }).join("");
+
+  const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Worksheet ss:Name="${escaparXml(nomePlanilha)}">
+  <Table>
+   <Row>${cabecalho}</Row>
+   ${corpo}
+  </Table>
+ </Worksheet>
+</Workbook>`;
+
+  const blob = new Blob([xml], { type: "application/vnd.ms-excel" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -246,12 +284,28 @@ function baixarJson(nomeArquivo, dados) {
   URL.revokeObjectURL(url);
 }
 
-function lerArquivoJson(file) {
+function lerArquivoExcelXml(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        resolve(JSON.parse(reader.result));
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(reader.result, "text/xml");
+        const rows = Array.from(xml.getElementsByTagName("Row"));
+        if (rows.length < 2) return resolve([]);
+
+        const getCellValues = (row) => Array.from(row.getElementsByTagName("Cell")).map((cell) => {
+          const data = cell.getElementsByTagName("Data")[0];
+          return data?.textContent?.trim() || "";
+        });
+
+        const headers = getCellValues(rows[0]).map((header) => header.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""));
+        const dados = rows.slice(1).map((row) => {
+          const values = getCellValues(row);
+          return headers.reduce((obj, header, index) => ({ ...obj, [header]: values[index] || "" }), {});
+        });
+
+        resolve(dados);
       } catch {
         reject(new Error("Arquivo inválido"));
       }
@@ -264,29 +318,40 @@ function lerArquivoJson(file) {
 function normalizarProdutoImportado(item, index) {
   return {
     id: item.id || Date.now() + index,
-    name: item.name || item.nome || "Produto importado",
-    sku: item.sku || item.codigo || `IMP-${Date.now().toString().slice(-5)}-${index}`,
+    name: item.name || item.nome || item.produto || "Produto importado",
+    sku: item.sku || item.codigo || "",
     category: item.category || item.categoria || "Importados",
-    description: item.description || item.descricao || "Produto importado por arquivo JSON",
-    cost: Number(item.cost ?? item.preco_custo ?? 0),
-    price: Number(item.price ?? item.preco_venda ?? 0),
-    stock: Number(item.stock ?? item.estoque ?? 0),
-    minStock: Number(item.minStock ?? item.estoque_minimo ?? 0),
-    status: item.status || "Ativo",
-  };
-}
-
-function normalizarClienteImportado(item, index) {
+    description: item.description || item.descricao || "Produto importado por arquivo Excel XML",
+    cost: Number(item.cost || item.preco_custo || item.custo || 0),
+    price: Number(item.price || item.preco_venda || item.valor_venda || 0),
+    stock: Number(item.stock || item.estoque || 0),
+    minStock: Number(item.minStock || item.estoque_minimo || item.minimo || 0),
+    status: item.statfunction normalizarClienteImportado(item, index) {
   return {
     id: item.id || Date.now() + index,
-    name: item.name || item.nome || "Cliente importado",
-    document: item.document || item.documento || "",
+    name: item.name || item.nome || item.cliente || "Cliente importado",
+    document: item.document || item.documento || item.cpf_cnpj || "",
     phone: item.phone || item.telefone || "",
     email: item.email || "",
     address: item.address || item.endereco || "",
     birthday: item.birthday || item.data_nascimento || "",
-    notes: item.notes || item.observacoes || "Cliente importado por arquivo JSON",
-    status: item.status || "Novo",
+    notes: item.notes || item.observacoes || "Cliente importado por arquivo Excel XML",
+    status: item.status || "function normalizarFornecedorImportado(item, index) {
+  return {
+    id: item.id || Date.now() + index,
+    name: item.name || item.nome || item.fornecedor || "Fornecedor importado",
+    document: item.document || item.documento || item.cnpj || "",
+    phone: item.phone || item.telefone || "",
+    email: item.email || "",
+    category: item.category || item.categoria || "Geral",
+    suppliedItems: item.suppliedItems || item.itens_fornecidos || item.produtos_servicos_fornecidos || item.produtos || "",
+    address: item.address || item.endereco || "",
+    notes: item.notes || item.observacoes || "Fornecedor importado por arquivo Excel XML",
+    status: item.status || "Ativo",
+  };
+}
+
+function Apptatus || "Ativo",
   };
 }
 
@@ -297,6 +362,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [products, setProducts] = useState(saved?.products || initialProducts);
   const [customers, setCustomers] = useState(saved?.customers || initialCustomers);
+  const [suppliers, setSuppliers] = useState(saved?.suppliers || initialSuppliers);
   const [sales, setSales] = useState(saved?.sales || initialSales);
   const [movements, setMovements] = useState(saved?.movements || initialMovements);
   const [cart, setCart] = useState([]);
@@ -311,8 +377,8 @@ function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify({ products, customers, sales, movements }));
-  }, [products, customers, sales, movements]);
+    localStorage.setItem(storageKey, JSON.stringify({ products, customers, suppliers, sales, movements }));
+  }, [products, customers, suppliers, sales, movements]);
 
   useEffect(() => {
     async function carregarDadosDoBanco() {
@@ -381,6 +447,7 @@ function App() {
     localStorage.removeItem(storageKey);
     setProducts(initialProducts);
     setCustomers(initialCustomers);
+    setSuppliers(initialSuppliers);
     setSales(initialSales);
     setMovements(initialMovements);
     setCart([]);
@@ -671,8 +738,27 @@ function App() {
   };
 
   const exportProducts = () => {
-    baixarJson("produtos-gestao-comercial.json", { tipo: "produtos", exportado_em: new Date().toISOString(), produtos: products });
-    showToast("Arquivo de produtos exportado com sucesso.");
+    baixarExcelXml("produtos-gestao-comercial.xml", "Produtos", [
+      { key: "name", label: "Nome" },
+      { key: "sku", label: "SKU" },
+      { key: "category", label: "Categoria" },
+      { key: "const exportCustomers = () => {
+    baixarExcelXml("clientes-gestao-comercial.xml", "Clientes", [
+      { key: "name", label: "Nome" },
+      { key: "document", label: "Documento" },
+      { key: "phone", label: "Telefone" },
+      { key: "email", label: "Email" },
+      { key: "address", label: "Endereco" },
+      { key: "birthday", label: "Data Nascimento" },
+      { key: "notes", label: "Observacoes" },
+      { key: "status", label: "Status" },
+    ], customers);
+    showToast("Arquivo Excel XML de clientes exportado com sucesso.");
+  };
+
+  const importProductsatus" },
+    ], products);
+    showToast("Arquivo Excel XML de produtos exportado com sucesso.");
   };
 
   const exportCustomers = () => {
@@ -683,8 +769,7 @@ function App() {
   const importProducts = async (file) => {
     if (!file) return;
     try {
-      const json = await lerArquivoJson(file);
-      const lista = Array.isArray(json) ? json : json.produtos || json.products || [];
+      const lista = await lerArquivoExcelXml(file);
       if (!lista.length) return showToast("Nenhum produto encontrado no arquivo.");
       const produtosImportados = lista.map(normalizarProdutoImportado);
 
@@ -698,15 +783,14 @@ function App() {
 
       showToast(`${produtosImportados.length} produto(s) importado(s) com sucesso.`);
     } catch {
-      showToast("Não foi possível importar produtos. Use um arquivo JSON válido.");
+      showToast("Não foi possível importar produtos. Use um arquivo Excel XML válido.");
     }
   };
 
   const importCustomers = async (file) => {
     if (!file) return;
     try {
-      const json = await lerArquivoJson(file);
-      const lista = Array.isArray(json) ? json : json.clientes || json.customers || [];
+      const lista = await lerArquivoExcelXml(file);
       if (!lista.length) return showToast("Nenhum cliente encontrado no arquivo.");
       const clientesImportados = lista.map(normalizarClienteImportado);
 
@@ -720,7 +804,51 @@ function App() {
 
       showToast(`${clientesImportados.length} cliente(s) importado(s) com sucesso.`);
     } catch {
-      showToast("Não foi possível importar clientes. Use um arquivo JSON válido.");
+      showToast("Não foi possível importar clientes. Use um arquivo Excel XML válido.");
+    }
+  };
+
+  const saveSupplier = async (form) => {
+    if (!form.name || !form.phone) {
+      showToast("Preencha nome e telefone do fornecedor.");
+      return false;
+    }
+    const supplier = { ...form, id: form.id || getNextId(suppliers), status: form.status || "Ativo" };
+    setSuppliers((current) => form.id ? current.map((item) => item.id === form.id ? supplier : item) : [...current, supplier]);
+    showToast(form.id ? "Fornecedor atualizado com sucesso." : "Fornecedor cadastrado com sucesso.");
+    return true;
+  };
+
+  const deleteSupplier = (supplierId) => {
+    setSuppliers((current) => current.filter((supplier) => supplier.id !== supplierId));
+    showToast("Fornecedor removido com sucesso.");
+  };
+
+  const exportSuppliers = () => {
+    baixarExcelXml("fornecedores-gestao-comercial.xml", "Fornecedores", [
+      { key: "name", label: "Nome" },
+      { key: "document", label: "CNPJ" },
+      { key: "phone", label: "Telefone" },
+      { key: "email", label: "Email" },
+      { key: "category", label: "Categoria" },
+      { key: "suppliedItems", label: "Produtos Servicos Fornecidos" },
+      { key: "address", label: "Endereco" },
+      { key: "notes", label: "Observacoes" },
+      { key: "status", label: "Status" },
+    ], suppliers);
+    showToast("Arquivo Excel XML de fornecedores exportado com sucesso.");
+  };
+
+  const importSuppliers = async (file) => {
+    if (!file) return;
+    try {
+      const lista = await lerArquivoExcelXml(file);
+      if (!lista.length) return showToast("Nenhum fornecedor encontrado no arquivo.");
+      const fornecedoresImportados = lista.map(normalizarFornecedorImportado);
+      setSuppliers((current) => [...current, ...fornecedoresImportados]);
+      showToast(`${fornecedoresImportados.length} fornecedor(es) importado(s) com sucesso.`);
+    } catch {
+      showToast("Não foi possível importar fornecedores. Use um arquivo Excel XML válido.");
     }
   };
 
@@ -735,6 +863,7 @@ function App() {
     if (active === "stock") return <Stock products={products} movements={movements} addStock={addStock} />;
     if (active === "pdv") return <PDV products={products} customers={customers} cart={cart} addToCart={addToCart} updateCartQty={updateCartQty} removeFromCart={(id) => setCart((current) => current.filter((item) => item.productId !== id))} finishSale={finishSale} cartTotal={cartTotal} />;
     if (active === "customers") return <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} sales={sales} exportCustomers={exportCustomers} importCustomers={importCustomers} />;
+    if (active === "suppliers") return <Suppliers suppliers={suppliers} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} exportSuppliers={exportSuppliers} importSuppliers={importSuppliers} />;
     if (active === "crm") return <CRM customers={customers} sales={sales} />;
     if (active === "sales") return <Sales sales={sales} cancelSale={cancelSale} />;
     return null;
@@ -999,7 +1128,7 @@ function Products({ products, saveProduct, deleteProduct, exportProducts, import
   const openForm = (product) => { setForm(product ? { ...product } : emptyProduct); setModal(true); };
   const submit = async () => { if (await saveProduct(form)) setModal(false); };
 
-  return <div><SectionTitle title="Produtos" subtitle="Cadastro real, edição, pesquisa, importação, exportação, estoque e margem de lucro." actions={<div className="flex flex-wrap gap-2"><button onClick={exportProducts} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Download size={16} /> Exportar</button><label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Upload size={16} /> Importar<input type="file" accept="application/json,.json" className="hidden" onChange={(e) => { importProducts(e.target.files?.[0]); e.target.value = ""; }} /></label></div>} /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar produto, SKU ou categoria..." button="Novo produto" onClick={() => openForm()} /><DataTable headers={["Produto", "SKU", "Categoria", "Preço", "Margem", "Estoque", "Status", "Ações"]}>{filtered.map((product) => { const lucro = Number(product.price) - Number(product.cost); const margem = Number(product.price) > 0 ? (lucro / Number(product.price)) * 100 : 0; return <tr key={product.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4"><b>{product.name}</b><p className="text-xs text-slate-500">{product.description}</p></td><td className="p-4">{product.sku}</td><td className="p-4">{product.category}</td><td className="p-4">{currency(product.price)}</td><td className="p-4"><div className="text-sm"><b className={lucro >= 0 ? "text-emerald-700" : "text-red-700"}>{currency(lucro)}</b><p className="text-xs text-slate-500">{margem.toFixed(1)}%</p></div></td><td className="p-4">{product.stock <= product.minStock ? <Badge tone="amber">{product.stock} baixo</Badge> : `${product.stock} un.`}</td><td className="p-4"><Badge tone={product.status === "Ativo" ? "green" : "slate"}>{product.status}</Badge></td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(product)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Edit3 size={18} /></button><button onClick={() => deleteProduct(product.id)} className="rounded-xl bg-red-50 p-2 text-red-600 hover:bg-red-100"><Trash2 size={18} /></button></div></td></tr>; })}</DataTable>{modal && <Modal title={form.id ? "Editar produto" : "Cadastrar produto"} onClose={() => setModal(false)}><ProductForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
+  return <div><SectionTitle title="Produtos" subtitle="Cadastro real, edição, pesquisa, importação, exportação, estoque e margem de lucro." actions={<div className="flex flex-wrap gap-2"><button onClick={exportProducts} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Download size={16} /> Exportar</button><label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Upload size={16} /> Importar<input type="file" accept=".xml,application/xml,text/xml" className="hidden" onChange={(e) => { importProducts(e.target.files?.[0]); e.target.value = ""; }} /></label></div>} /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar produto, SKU ou categoria..." button="Novo produto" onClick={() => openForm()} /><DataTable headers={["Produto", "SKU", "Categoria", "Preço", "Margem", "Estoque", "Status", "Ações"]}>{filtered.map((product) => { const lucro = Number(product.price) - Number(product.cost); const margem = Number(product.price) > 0 ? (lucro / Number(product.price)) * 100 : 0; return <tr key={product.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4"><b>{product.name}</b><p className="text-xs text-slate-500">{product.description}</p></td><td className="p-4">{product.sku}</td><td className="p-4">{product.category}</td><td className="p-4">{currency(product.price)}</td><td className="p-4"><div className="text-sm"><b className={lucro >= 0 ? "text-emerald-700" : "text-red-700"}>{currency(lucro)}</b><p className="text-xs text-slate-500">{margem.toFixed(1)}%</p></div></td><td className="p-4">{product.stock <= product.minStock ? <Badge tone="amber">{product.stock} baixo</Badge> : `${product.stock} un.`}</td><td className="p-4"><Badge tone={product.status === "Ativo" ? "green" : "slate"}>{product.status}</Badge></td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(product)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Edit3 size={18} /></button><button onClick={() => deleteProduct(product.id)} className="rounded-xl bg-red-50 p-2 text-red-600 hover:bg-red-100"><Trash2 size={18} /></button></div></td></tr>; })}</DataTable>{modal && <Modal title={form.id ? "Editar produto" : "Cadastrar produto"} onClose={() => setModal(false)}><ProductForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
 }
 
 function ProductForm({ form, setForm, onSubmit }) {
@@ -1036,12 +1165,28 @@ function Customers({ customers, saveCustomer, deleteCustomer, sales, exportCusto
   const openForm = (customer) => { setForm(customer ? { ...customer } : emptyCustomer); setModal(true); };
   const submit = async () => { if (await saveCustomer(form)) setModal(false); };
 
-  return <div><SectionTitle title="Clientes" subtitle="Cadastro real, pesquisa, importação, exportação e histórico de relacionamento do cliente." actions={<div className="flex flex-wrap gap-2"><button onClick={exportCustomers} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Download size={16} /> Exportar</button><label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Upload size={16} /> Importar<input type="file" accept="application/json,.json" className="hidden" onChange={(e) => { importCustomers(e.target.files?.[0]); e.target.value = ""; }} /></label></div>} /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar cliente..." button="Novo cliente" onClick={() => openForm()} /><DataTable headers={["Cliente", "Contato", "Endereço", "Status", "Compras", "Ações"]}>{filtered.map((customer) => <tr key={customer.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4"><b>{customer.name}</b><p className="text-xs text-slate-500">{customer.email}</p></td><td className="p-4">{customer.phone}</td><td className="p-4">{customer.address}</td><td className="p-4"><Badge tone={customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></td><td className="p-4">{sales.filter((sale) => sale.customerId === customer.id).length}</td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(customer)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Edit3 size={18} /></button><button onClick={() => deleteCustomer(customer.id)} className="rounded-xl bg-red-50 p-2 text-red-600 hover:bg-red-100"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={form.id ? "Editar cliente" : "Cadastrar cliente"} onClose={() => setModal(false)}><CustomerForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
+  return <div><SectionTitle title="Clientes" subtitle="Cadastro real, pesquisa, importação, exportação e histórico de relacionamento do cliente." actions={<div className="flex flex-wrap gap-2"><button onClick={exportCustomers} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Download size={16} /> Exportar</button><label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Upload size={16} /> Importar<input type="file" accept=".xml,application/xml,text/xml"accept="application/json,.json" className="hidden" onChange={(e) => { importCustomers(e.target.files?.[0]); e.target.value = ""; }} /></label></div>} /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar cliente..." button="Novo cliente" onClick={() => openForm()} /><DataTable headers={["Cliente", "Contato", "Endereço", "Status", "Compras", "Ações"]}>{filtered.map((customer) => <tr key={customer.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4"><b>{customer.name}</b><p className="text-xs text-slate-500">{customer.email}</p></td><td className="p-4">{customer.phone}</td><td className="p-4">{customer.address}</td><td className="p-4"><Badge tone={customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></td><td className="p-4">{sales.filter((sale) => sale.customerId === customer.id).length}</td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(customer)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Edit3 size={18} /></button><button onClick={() => deleteCustomer(customer.id)} className="rounded-xl bg-red-50 p-2 text-red-600 hover:bg-red-100"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={form.id ? "Editar cliente" : "Cadastrar cliente"} onClose={() => setModal(false)}><CustomerForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
 }
 
 function CustomerForm({ form, setForm, onSubmit }) {
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
-  return <div className="grid gap-4 md:grid-cols-2"><Input label="Nome completo" value={form.name} onChange={(e) => update("name", e.target.value)} /><Input label="CPF/CNPJ" value={form.document} onChange={(e) => update("document", e.target.value)} /><Input label="Telefone" value={form.phone} onChange={(e) => update("phone", e.target.value)} /><Input label="E-mail" value={form.email} onChange={(e) => update("email", e.target.value)} /><Input label="Endereço" value={form.address} onChange={(e) => update("address", e.target.value)} /><Input label="Data de nascimento" type="date" value={form.birthday} onChange={(e) => update("birthday", e.target.value)} /><Select label="Status" value={form.status} onChange={(e) => update("status", e.target.value)}><option>Novo</option><option>Ativo</option><option>Recorrente</option><option>Inativo</option></Select><Input label="Observações" value={form.notes} onChange={(e) => update("notes", e.target.value)} /><div className="md:col-span-2 flex justify-end"><button onClick={onSubmit} className="rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 flex items-center gap-2"><Save size={18} /> Salvar cliente</button></div></div>;
+  return <div className="grid gap-4 md:grid-cols-2"><Input label="Nome completo" value={form.name} onChange={(e) => update("name", e.target.value)} /><Input label="CPF/CNPJ" value={form.document} onChange={(e) => update("document", e.target.value)} /><Input label="Telefone" value={form.phone} onChange={(e) => update("phone", e.target.value)} /><Input label="E-mail" value={form.email} onChange={(e) => update("email", e.target.value)} /><Input label="Endereço" value={form.address} onChange={(e) => update("address", e.target.value)} /><Input label="Data de nascimento" type="date" value={form.birthday} onChange={(e) => update("birthday", e.target.value)} /><Select label="Status" value={form.status} onChange={(e) => update("status", e.target.value)}><option>Novo</option><option>Ativo</option><option>Recorrente</option><option>Inativo</option></Select><Input label="Observações" value={form.notes} onChange={(e) => update("notes", e.target.value)} /><div className="md:col-span-2 flex justify-end"><button onClick={onSubmit} className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-blue-700/20 transition hover:scale-[1.01] hover:shadow-blue-700/30 flex items-center gap-2"><Save size={18} /> Salvar cliente</button></div></div>;
+}
+
+function Suppliers({ suppliers, saveSupplier, deleteSupplier, exportSuppliers, importSuppliers }) {
+  const [query, setQuery] = useState("");
+  const [modal, setModal] = useState(false);
+  const [form, setForm] = useState(emptySupplier);
+  const filtered = suppliers.filter((supplier) => `${supplier.name} ${supplier.document} ${supplier.category} ${supplier.suppliedItems}`.toLowerCase().includes(query.toLowerCase()));
+  const openForm = (supplier) => { setForm(supplier ? { ...supplier } : emptySupplier); setModal(true); };
+  const submit = async () => { if (await saveSupplier(form)) setModal(false); };
+
+  return <div><SectionTitle title="Fornecedores" subtitle="Cadastro de fornecedores, contatos comerciais, produtos fornecidos, importação e exportação." actions={<div className="flex flex-wrap gap-2"><button onClick={exportSuppliers} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Download size={16} /> Exportar</button><label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center gap-2"><Upload size={16}accept=".xml,application/xml,text/xml" /> Importar<input type="file" accept="application/json,.json" className="hidden" onChange={(e) => { importSuppliers(e.target.files?.[0]); e.target.value = ""; }} /></label></div>} /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar fornecedor, CNPJ, categoria ou item fornecido..." button="Novo fornecedor" onClick={() => openForm()} /><DataTable headers={["Fornecedor", "CNPJ", "Contato", "Categoria", "Fornece", "Status", "Ações"]}>{filtered.map((supplier) => <tr key={supplier.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4"><b>{supplier.name}</b><p className="text-xs text-slate-500">{supplier.email}</p></td><td className="p-4">{supplier.document}</td><td className="p-4">{supplier.phone}</td><td className="p-4">{supplier.category}</td><td className="p-4 text-sm text-slate-600">{supplier.suppliedItems}</td><td className="p-4"><Badge tone={supplier.status === "Ativo" ? "green" : "slate"}>{supplier.status}</Badge></td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(supplier)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Edit3 size={18} /></button><button onClick={() => deleteSupplier(supplier.id)} className="rounded-xl bg-red-50 p-2 text-red-600 hover:bg-red-100"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={form.id ? "Editar fornecedor" : "Cadastrar fornecedor"} onClose={() => setModal(false)}><SupplierForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
+}
+
+function SupplierForm({ form, setForm, onSubmit }) {
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  return <div className="grid gap-4 md:grid-cols-2"><Input label="Nome do fornecedor" value={form.name} onChange={(e) => update("name", e.target.value)} /><Input label="CNPJ/Documento" value={form.document} onChange={(e) => update("document", e.target.value)} /><Input label="Telefone" value={form.phone} onChange={(e) => update("phone", e.target.value)} /><Input label="E-mail" value={form.email} onChange={(e) => update("email", e.target.value)} /><Input label="Categoria" value={form.category} onChange={(e) => update("category", e.target.value)} /><Input label="Produtos/serviços fornecidos" value={form.suppliedItems} onChange={(e) => update("suppliedItems", e.target.value)} /><Input label="Endereço" value={form.address} onChange={(e) => update("address", e.target.value)} /><Select label="Status" value={form.status} onChange={(e) => update("status", e.target.value)}><option>Ativo</option><option>Inativo</option><option>Em avaliação</option></Select><div className="md:col-span-2"><Input label="Observações" value={form.notes} onChange={(e) => update("notes", e.target.value)} /></div><div className="md:col-span-2 flex justify-end"><button onClick={onSubmit} className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-blue-700/20 transition hover:scale-[1.01] hover:shadow-blue-700/30 flex items-center gap-2"><Save size={18} /> Salvar fornecedor</button></div></div>;
 }
 
 function CRM({ customers, sales }) {
@@ -1096,8 +1241,75 @@ function SaleDetailsModal({ sale, onClose }) {
 function ReceiptModal({ sale, onClose }) {
   const subtotal = sale.items.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0);
 
+  const getReceiptHtml = () => `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Comprovante Venda ${sale.id}</title>
+        <style>
+          * { box-sizing: border-box; }
+          body { font-family: Arial, sans-serif; margin: 0; padding: 24px; color: #0f172a; background: #f8fafc; }
+          .receipt { max-width: 760px; margin: 0 auto; background: white; border-radius: 24px; padding: 32px; border: 1px solid #e2e8f0; }
+          .header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 1px solid #e2e8f0; padding-bottom: 20px; }
+          .tag { color: #1d4ed8; font-size: 11px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; }
+          h1 { margin: 6px 0 4px; font-size: 26px; }
+          .muted { color: #64748b; font-size: 13px; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+          .box { background: #f8fafc; border-radius: 16px; padding: 14px; border: 1px solid #eef2f7; }
+          .box span { display: block; color: #64748b; font-size: 12px; margin-bottom: 4px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 22px; overflow: hidden; border-radius: 14px; }
+          th { background: #0f172a; color: white; text-align: left; padding: 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+          td { padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+          .totals { margin-top: 22px; background: #0f172a; color: white; border-radius: 18px; padding: 18px; }
+          .row { display: flex; justify-content: space-between; margin: 8px 0; color: #cbd5e1; }
+          .total { display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,.15); margin-top: 14px; padding-top: 14px; font-size: 24px; font-weight: 900; color: white; }
+          .thanks { text-align: center; color: #64748b; margin-top: 18px; font-size: 12px; }
+          @media print { body { background: white; padding: 0; } .receipt { border: none; box-shadow: none; } }
+        </style>
+      </head>
+      <body>
+        <section class="receipt">
+          <div class="header">
+            <div>
+              <div class="tag">Comprovante de venda</div>
+              <h1>Gestão Comercial Integrada</h1>
+              <div class="muted">Projeto Integrador — UNIVESP</div>
+            </div>
+            <div style="text-align:right">
+              <strong>Venda #${sale.id}</strong><br />
+              <span class="muted">${sale.date}</span>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="box"><span>Cliente</span><strong>${sale.customerName || "Cliente não informado"}</strong></div>
+            <div class="box"><span>Forma de pagamento</span><strong>${sale.payment}</strong></div>
+          </div>
+          <table>
+            <thead><tr><th>Item</th><th>Qtd.</th><th>Valor</th><th>Subtotal</th></tr></thead>
+            <tbody>
+              ${sale.items.map((item) => `<tr><td>${item.name}</td><td>${item.qty}</td><td>${currency(item.price)}</td><td><strong>${currency(item.qty * item.price)}</strong></td></tr>`).join("")}
+            </tbody>
+          </table>
+          <div class="totals">
+            <div class="row"><span>Subtotal</span><span>${currency(subtotal)}</span></div>
+            <div class="row"><span>Desconto</span><span>${currency(sale.discount)}</span></div>
+            ${sale.payment === "Dinheiro" ? `<div class="row"><span>Valor recebido</span><span>${currency(sale.amountPaid)}</span></div><div class="row"><span>Troco</span><span>${currency(sale.change)}</span></div>` : ""}
+            <div class="total"><span>Total</span><span>${currency(getSaleTotal(sale))}</span></div>
+          </div>
+          <p class="thanks">Obrigado pela preferência.</p>
+        </section>
+        <script>window.onload = () => window.print();</script>
+      </body>
+    </html>
+  `;
+
   const printReceipt = () => {
-    window.print();
+    const printWindow = window.open("", "_blank", "width=900,height=700");
+    if (!printWindow) return;
+    printWindow.document.open();
+    printWindow.document.write(getReceiptHtml());
+    printWindow.document.close();
   };
 
   return (
@@ -1110,36 +1322,15 @@ function ReceiptModal({ sale, onClose }) {
               <h2 className="mt-1 text-2xl font-black text-slate-950">Gestão Comercial Integrada</h2>
               <p className="mt-1 text-sm text-slate-500">Projeto Integrador — UNIVESP</p>
             </div>
-            <div className="text-right text-sm text-slate-500">
-              <p>Venda #{sale.id}</p>
-              <p>{sale.date}</p>
-            </div>
+            <div className="text-right text-sm text-slate-500"><p>Venda #{sale.id}</p><p>{sale.date}</p></div>
           </div>
-
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-400">Cliente</p><b>{sale.customerName || "Cliente não informado"}</b></div>
-            <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-400">Pagamento</p><b>{sale.payment}</b></div>
-          </div>
-
-          <div className="mt-5 space-y-3">
-            {sale.items.map((item) => <div key={`${sale.id}-recibo-${item.productId}`} className="flex items-center justify-between rounded-2xl border border-slate-100 p-4"><div><b>{item.name}</b><p className="text-xs text-slate-500">{item.qty} x {currency(item.price)}</p></div><b>{currency(item.qty * item.price)}</b></div>)}
-          </div>
-
-          <div className="mt-5 rounded-2xl bg-slate-950 p-5 text-white">
-            <div className="flex justify-between text-sm text-slate-300"><span>Subtotal</span><span>{currency(subtotal)}</span></div>
-            <div className="mt-2 flex justify-between text-sm text-slate-300"><span>Desconto</span><span>{currency(sale.discount)}</span></div>
-            {sale.payment === "Dinheiro" && <><div className="mt-2 flex justify-between text-sm text-slate-300"><span>Valor recebido</span><span>{currency(sale.amountPaid)}</span></div><div className="mt-2 flex justify-between text-sm text-slate-300"><span>Troco</span><span>{currency(sale.change)}</span></div></>}
-            <div className="mt-4 flex justify-between border-t border-white/10 pt-4 text-2xl font-black"><span>Total</span><span>{currency(getSaleTotal(sale))}</span></div>
-          </div>
-
+          <div className="mt-5 grid gap-3 md:grid-cols-2"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-400">Cliente</p><b>{sale.customerName || "Cliente não informado"}</b></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-400">Pagamento</p><b>{sale.payment}</b></div></div>
+          <div className="mt-5 space-y-3">{sale.items.map((item) => <div key={`${sale.id}-recibo-${item.productId}`} className="flex items-center justify-between rounded-2xl border border-slate-100 p-4"><div><b>{item.name}</b><p className="text-xs text-slate-500">{item.qty} x {currency(item.price)}</p></div><b>{currency(item.qty * item.price)}</b></div>)}</div>
+          <div className="mt-5 rounded-2xl bg-slate-950 p-5 text-white"><div className="flex justify-between text-sm text-slate-300"><span>Subtotal</span><span>{currency(subtotal)}</span></div><div className="mt-2 flex justify-between text-sm text-slate-300"><span>Desconto</span><span>{currency(sale.discount)}</span></div>{sale.payment === "Dinheiro" && <><div className="mt-2 flex justify-between text-sm text-slate-300"><span>Valor recebido</span><span>{currency(sale.amountPaid)}</span></div><div className="mt-2 flex justify-between text-sm text-slate-300"><span>Troco</span><span>{currency(sale.change)}</span></div></>}<div className="mt-4 flex justify-between border-t border-white/10 pt-4 text-2xl font-black"><span>Total</span><span>{currency(getSaleTotal(sale))}</span></div></div>
           <p className="mt-5 text-center text-xs text-slate-400">Obrigado pela preferência.</p>
         </div>
       </div>
-
-      <div className="mt-6 flex flex-col gap-3 md:flex-row md:justify-end">
-        <button onClick={printReceipt} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center justify-center gap-2"><Printer size={16} /> Imprimir comprovante</button>
-        <button onClick={onClose} className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20">Nova venda</button>
-      </div>
+      <div className="mt-6 flex flex-col gap-3 md:flex-row md:justify-end"><button onClick={printReceipt} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center justify-center gap-2"><Printer size={16} /> Imprimir comprovante</button><button onClick={printReceipt} className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 shadow-sm hover:bg-blue-100 flex items-center justify-center gap-2"><Download size={16} /> Baixar PDF</button><button onClick={onClose} className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20">Nova venda</button></div>
     </Modal>
   );
 }
