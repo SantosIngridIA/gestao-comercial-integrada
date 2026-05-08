@@ -1,51 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import {
-  BarChart3,
-  Boxes,
-  Building2,
-  CreditCard,
-  Edit3,
-  FileText,
-  Home,
-  LogIn,
-  LogOut,
-  Menu,
-  Package,
-  Plus,
-  Receipt,
-  RotateCcw,
-  Save,
-  Search,
-  ShoppingCart,
-  Trash2,
-  UserRound,
-  Users,
-  Wallet,
-  X,
-} from "lucide-react";
+import { BarChart3, Boxes, Building2, CreditCard, Edit3, FileText, Home, LogIn, LogOut, Menu, Package, Plus, Receipt, RotateCcw, Save, Search, ShoppingCart, Trash2, UserPlus, UserRound, Users, Wallet, X } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { supabase } from "./supabaseClient";
 
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-
-const currency = (value) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value) || 0);
-
-const getToday = () => new Date().toISOString().slice(0, 10);
-const today = getToday();
+const currency = (value) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value) || 0);
+const today = new Date().toISOString().slice(0, 10);
+const storageKey = "gestao-comercial-integrada-v4";
 const chartColors = ["#2563eb", "#059669", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2"];
-const storageKey = "gestao-comercial-integrada-v2";
 
 const initialProducts = [
   { id: 1, name: "Camiseta Básica", sku: "CAM-001", category: "Vestuário", description: "Camiseta algodão", cost: 18, price: 39.9, stock: 32, minStock: 10, status: "Ativo" },
@@ -69,15 +31,13 @@ const initialCustomers = [
 ];
 
 const initialSales = [
-  { id: 1001, date: today, customerId: 1, customerName: "Ana Souza", payment: "PIX", discount: 0, status: "Concluída", items: [{ productId: 1, name: "Camiseta Básica", qty: 2, price: 39.9 }, { productId: 9, name: "Chocolate", qty: 1, price: 8.9 }] },
-  { id: 1002, date: today, customerId: 2, customerName: "Carlos Lima", payment: "Cartão de crédito", discount: 5, status: "Concluída", items: [{ productId: 10, name: "Carregador USB", qty: 1, price: 49.9 }] },
-  { id: 1003, date: "2026-05-05", customerId: 3, customerName: "Fernanda Alves", payment: "Dinheiro", discount: 0, status: "Concluída", items: [{ productId: 4, name: "Caderno Universitário", qty: 3, price: 24.9 }, { productId: 5, name: "Caneta Azul", qty: 10, price: 2.5 }] },
+  { id: 1001, date: today, customerId: 1, customerName: "Ana Souza", payment: "PIX", discount: 0, amountPaid: 0, change: 0, status: "Concluída", items: [{ productId: 1, name: "Camiseta Básica", qty: 2, price: 39.9 }, { productId: 9, name: "Chocolate", qty: 1, price: 8.9 }] },
+  { id: 1002, date: today, customerId: 2, customerName: "Carlos Lima", payment: "Dinheiro", discount: 5, amountPaid: 60, change: 15.1, status: "Concluída", items: [{ productId: 10, name: "Carregador USB", qty: 1, price: 49.9 }] },
 ];
 
 const initialMovements = [
   { id: 1, date: today, productName: "Camiseta Básica", type: "Venda", qty: -2, user: "Administrador" },
   { id: 2, date: today, productName: "Chocolate", type: "Venda", qty: -1, user: "Administrador" },
-  { id: 3, date: "2026-05-04", productName: "Água Mineral", type: "Entrada", qty: 30, user: "Administrador" },
 ];
 
 const menu = [
@@ -90,6 +50,9 @@ const menu = [
   { key: "sales", label: "Vendas", icon: Receipt },
   { key: "reports", label: "Relatórios", icon: FileText },
 ];
+
+const emptyProduct = { name: "", sku: "", category: "", description: "", cost: "", price: "", stock: "", minStock: "", status: "Ativo" };
+const emptyCustomer = { name: "", document: "", phone: "", email: "", address: "", birthday: "", notes: "", status: "Novo" };
 
 function getNextId(items, fallback = 1) {
   if (!items.length) return fallback;
@@ -111,105 +74,28 @@ function readStorage() {
 }
 
 function produtoDoBanco(produto) {
-  return {
-    id: produto.id,
-    name: produto.nome,
-    sku: produto.sku || "",
-    category: produto.categoria || "Geral",
-    description: produto.descricao || "Sem descrição",
-    cost: Number(produto.preco_custo) || 0,
-    price: Number(produto.preco_venda) || 0,
-    stock: Number(produto.estoque) || 0,
-    minStock: Number(produto.estoque_minimo) || 0,
-    status: produto.status || "Ativo",
-  };
+  return { id: produto.id, name: produto.nome, sku: produto.sku || "", category: produto.categoria || "Geral", description: produto.descricao || "Sem descrição", cost: Number(produto.preco_custo) || 0, price: Number(produto.preco_venda) || 0, stock: Number(produto.estoque) || 0, minStock: Number(produto.estoque_minimo) || 0, status: produto.status || "Ativo" };
 }
 
 function produtoParaBanco(produto) {
-  return {
-    nome: produto.name,
-    sku: produto.sku,
-    categoria: produto.category,
-    descricao: produto.description,
-    preco_custo: Number(produto.cost) || 0,
-    preco_venda: Number(produto.price) || 0,
-    estoque: Number(produto.stock) || 0,
-    estoque_minimo: Number(produto.minStock) || 0,
-    status: produto.status || "Ativo",
-  };
+  return { nome: produto.name, sku: produto.sku, categoria: produto.category, descricao: produto.description, preco_custo: Number(produto.cost) || 0, preco_venda: Number(produto.price) || 0, estoque: Number(produto.stock) || 0, estoque_minimo: Number(produto.minStock) || 0, status: produto.status || "Ativo" };
 }
 
 function clienteDoBanco(cliente) {
-  return {
-    id: cliente.id,
-    name: cliente.nome,
-    document: cliente.documento || "",
-    phone: cliente.telefone || "",
-    email: cliente.email || "",
-    address: cliente.endereco || "",
-    birthday: cliente.data_nascimento || "",
-    notes: cliente.observacoes || "",
-    status: cliente.status || "Novo",
-  };
+  return { id: cliente.id, name: cliente.nome, document: cliente.documento || "", phone: cliente.telefone || "", email: cliente.email || "", address: cliente.endereco || "", birthday: cliente.data_nascimento || "", notes: cliente.observacoes || "", status: cliente.status || "Novo" };
 }
 
 function clienteParaBanco(cliente) {
-  return {
-    nome: cliente.name,
-    documento: cliente.document,
-    telefone: cliente.phone,
-    email: cliente.email,
-    endereco: cliente.address,
-    data_nascimento: cliente.birthday || null,
-    observacoes: cliente.notes,
-    status: cliente.status || "Novo",
-  };
+  return { nome: cliente.name, documento: cliente.document, telefone: cliente.phone, email: cliente.email, endereco: cliente.address, data_nascimento: cliente.birthday || null, observacoes: cliente.notes, status: cliente.status || "Novo" };
 }
-
-function StatCard({ title, value, icon: Icon, caption }) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm text-slate-500">{title}</p>
-          <h3 className="mt-1 text-2xl font-bold text-slate-900">{value}</h3>
-          {caption && <p className="mt-1 text-xs text-slate-400">{caption}</p>}
-        </div>
-        <div className="rounded-2xl bg-blue-50 p-3 text-blue-700"><Icon size={22} /></div>
-      </div>
-    </motion.div>
-  );
-}
-
-function SectionTitle({ title, subtitle, actions }) {
-  return (
-    <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-950">{title}</h1>
-        <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
-      </div>
-      {actions}
-    </div>
-  );
-}
-
-function Badge({ children, tone = "blue" }) {
-  const styles = {
-    blue: "bg-blue-50 text-blue-700",
-    green: "bg-emerald-50 text-emerald-700",
-    red: "bg-red-50 text-red-700",
-    amber: "bg-amber-50 text-amber-700",
-    slate: "bg-slate-100 text-slate-700",
-  };
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${styles[tone] || styles.blue}`}>{children}</span>;
-}
-
-const emptyProduct = { name: "", sku: "", category: "", description: "", cost: "", price: "", stock: "", minStock: "", status: "Ativo" };
-const emptyCustomer = { name: "", document: "", phone: "", email: "", address: "", birthday: "", notes: "", status: "Novo" };
 
 function App() {
   const saved = readStorage();
-  const [logged, setLogged] = useState(false);
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authMode, setAuthMode] = useState("login");
+  const [authForm, setAuthForm] = useState({ name: "", email: "", password: "", profile: "Administrador" });
+  const [userProfile, setUserProfile] = useState(null);
   const [active, setActive] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [products, setProducts] = useState(saved?.products || initialProducts);
@@ -219,6 +105,52 @@ function App() {
   const [cart, setCart] = useState([]);
   const [toast, setToast] = useState("");
   const [usingDatabase, setUsingDatabase] = useState(false);
+
+  const showToast = (message) => {
+    setToast(message);
+    window.clearTimeout(showToast.timeoutId);
+    showToast.timeoutId = window.setTimeout(() => setToast(""), 2800);
+  };
+
+  const carregarPerfil = async (userId) => {
+    if (!userId) return null;
+    try {
+      const { data, error } = await supabase.from("perfis").select("*").eq("id", userId).single();
+      if (error) throw error;
+      setUserProfile(data);
+      return data;
+    } catch {
+      const fallback = { id: userId, nome: "Usuário", perfil: "Operador" };
+      setUserProfile(fallback);
+      return fallback;
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function iniciarSessao() {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+      setSession(data.session);
+      if (data.session?.user?.id) await carregarPerfil(data.session.user.id);
+      setAuthLoading(false);
+    }
+
+    iniciarSessao();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
+      setSession(currentSession);
+      if (currentSession?.user?.id) await carregarPerfil(currentSession.user.id);
+      else setUserProfile(null);
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify({ products, customers, sales, movements }));
@@ -231,28 +163,17 @@ function App() {
           supabase.from("produtos").select("*").order("id", { ascending: true }),
           supabase.from("clientes").select("*").order("id", { ascending: true }),
         ]);
-
         if (produtosResposta.error) throw produtosResposta.error;
         if (clientesResposta.error) throw clientesResposta.error;
-
         if (produtosResposta.data?.length) setProducts(produtosResposta.data.map(produtoDoBanco));
         if (clientesResposta.data?.length) setCustomers(clientesResposta.data.map(clienteDoBanco));
         setUsingDatabase(true);
-        showToast("Produtos e clientes carregados do banco Supabase.");
-      } catch (error) {
+      } catch {
         setUsingDatabase(false);
-        showToast("Banco não conectado. Usando dados locais do navegador.");
       }
     }
-
     carregarDadosDoBanco();
   }, []);
-
-  const showToast = (message) => {
-    setToast(message);
-    window.clearTimeout(showToast.timeoutId);
-    showToast.timeoutId = window.setTimeout(() => setToast(""), 2800);
-  };
 
   const totalToday = sales.filter((sale) => sale.date === today && sale.status === "Concluída").reduce((sum, sale) => sum + getSaleTotal(sale), 0);
   const totalMonth = sales.filter((sale) => sale.status === "Concluída").reduce((sum, sale) => sum + getSaleTotal(sale), 0);
@@ -260,29 +181,29 @@ function App() {
 
   const productSales = useMemo(() => {
     const salesMap = {};
-    sales.filter((sale) => sale.status === "Concluída").forEach((sale) => {
-      sale.items.forEach((item) => {
-        salesMap[item.name] = (salesMap[item.name] || 0) + Number(item.qty);
-      });
-    });
+    sales.filter((sale) => sale.status === "Concluída").forEach((sale) => sale.items.forEach((item) => { salesMap[item.name] = (salesMap[item.name] || 0) + Number(item.qty); }));
     return Object.entries(salesMap).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty).slice(0, 6);
   }, [sales]);
 
   const paymentData = useMemo(() => {
     const paymentMap = {};
-    sales.filter((sale) => sale.status === "Concluída").forEach((sale) => {
-      paymentMap[sale.payment] = (paymentMap[sale.payment] || 0) + getSaleTotal(sale);
-    });
+    sales.filter((sale) => sale.status === "Concluída").forEach((sale) => { paymentMap[sale.payment] = (paymentMap[sale.payment] || 0) + getSaleTotal(sale); });
     return Object.entries(paymentMap).map(([name, value]) => ({ name, value }));
   }, [sales]);
 
   const salesByDay = useMemo(() => {
     const dayMap = {};
-    sales.filter((sale) => sale.status === "Concluída").forEach((sale) => {
-      dayMap[sale.date.slice(5)] = (dayMap[sale.date.slice(5)] || 0) + getSaleTotal(sale);
-    });
+    sales.filter((sale) => sale.status === "Concluída").forEach((sale) => { dayMap[sale.date.slice(5)] = (dayMap[sale.date.slice(5)] || 0) + getSaleTotal(sale); });
     return Object.entries(dayMap).map(([date, total]) => ({ date, total })).sort((a, b) => a.date.localeCompare(b.date));
   }, [sales]);
+
+  const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0), [cart]);
+  const isOperador = userProfile?.perfil === "Operador";
+  const visibleMenu = isOperador ? menu.filter((item) => ["dashboard", "products", "pdv", "customers", "sales"].includes(item.key)) : menu;
+
+  useEffect(() => {
+    if (isOperador && !visibleMenu.some((item) => item.key === active)) setActive("dashboard");
+  }, [isOperador, active, visibleMenu]);
 
   const resetData = () => {
     localStorage.removeItem(storageKey);
@@ -294,32 +215,49 @@ function App() {
     showToast("Dados restaurados para o estado inicial.");
   };
 
-  const saveProduct = async (form) => {
-    if (!form.name || !form.price || !form.stock) {
-      showToast("Preencha nome, preço de venda e estoque.");
-      return false;
+  const handleLogin = async () => {
+    if (!authForm.email || !authForm.password) return showToast("Informe e-mail e senha.");
+    setAuthLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email: authForm.email, password: authForm.password });
+    setAuthLoading(false);
+    if (error) return showToast("Não foi possível entrar. Confira e-mail e senha.");
+    showToast("Login realizado com sucesso.");
+  };
+
+  const handleSignUp = async () => {
+    if (!authForm.name || !authForm.email || !authForm.password) return showToast("Preencha nome, e-mail e senha.");
+    if (authForm.password.length < 6) return showToast("A senha precisa ter pelo menos 6 caracteres.");
+    setAuthLoading(true);
+    const { data, error } = await supabase.auth.signUp({ email: authForm.email, password: authForm.password });
+    if (error) {
+      setAuthLoading(false);
+      return showToast("Não foi possível criar o usuário.");
     }
+    if (data.user?.id) {
+      await supabase.from("perfis").upsert({ id: data.user.id, nome: authForm.name, perfil: authForm.profile });
+    }
+    setAuthLoading(false);
+    showToast("Usuário cadastrado. Se necessário, confirme o e-mail antes de entrar.");
+    setAuthMode("login");
+  };
 
-    const product = {
-      ...form,
-      id: form.id || getNextId(products),
-      sku: form.sku || `PRO-${Date.now().toString().slice(-5)}`,
-      cost: Number(form.cost) || 0,
-      price: Number(form.price) || 0,
-      stock: Number(form.stock) || 0,
-      minStock: Number(form.minStock) || 0,
-      category: form.category || "Geral",
-      description: form.description || "Sem descrição",
-      status: form.status || "Ativo",
-    };
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setSession(null);
+    setUserProfile(null);
+    setCart([]);
+    showToast("Logout realizado com sucesso.");
+  };
 
+  const saveProduct = async (form) => {
+    if (!form.name || !form.price || !form.stock) return showToast("Preencha nome, preço de venda e estoque."), false;
+    const product = { ...form, id: form.id || getNextId(products), sku: form.sku || `PRO-${Date.now().toString().slice(-5)}`, cost: Number(form.cost) || 0, price: Number(form.price) || 0, stock: Number(form.stock) || 0, minStock: Number(form.minStock) || 0, category: form.category || "Geral", description: form.description || "Sem descrição", status: form.status || "Ativo" };
     try {
       if (usingDatabase) {
         if (form.id) {
           const { data, error } = await supabase.from("produtos").update(produtoParaBanco(product)).eq("id", form.id).select().single();
           if (error) throw error;
-          const updatedProduct = produtoDoBanco(data);
-          setProducts((current) => current.map((item) => item.id === form.id ? updatedProduct : item));
+          setProducts((current) => current.map((item) => item.id === form.id ? produtoDoBanco(data) : item));
         } else {
           const { data, error } = await supabase.from("produtos").insert(produtoParaBanco(product)).select().single();
           if (error) throw error;
@@ -328,10 +266,9 @@ function App() {
       } else {
         setProducts((current) => form.id ? current.map((item) => item.id === form.id ? product : item) : [...current, product]);
       }
-
       showToast(form.id ? "Produto atualizado com sucesso." : "Produto cadastrado com sucesso.");
       return true;
-    } catch (error) {
+    } catch {
       showToast("Não foi possível salvar o produto no banco.");
       return false;
     }
@@ -341,50 +278,37 @@ function App() {
     const productInCart = cart.some((item) => item.productId === productId);
     const productInSales = sales.some((sale) => sale.items.some((item) => item.productId === productId));
     const markInactive = productInCart || productInSales;
-
     try {
       if (usingDatabase) {
         if (markInactive) {
           const { error } = await supabase.from("produtos").update({ status: "Inativo" }).eq("id", productId);
           if (error) throw error;
           setProducts((current) => current.map((product) => product.id === productId ? { ...product, status: "Inativo" } : product));
-          showToast("Produto vinculado a vendas foi marcado como inativo.");
-        } else {
-          const { error } = await supabase.from("produtos").delete().eq("id", productId);
-          if (error) throw error;
-          setProducts((current) => current.filter((product) => product.id !== productId));
-          showToast("Produto removido com sucesso.");
+          return showToast("Produto vinculado a vendas foi marcado como inativo.");
         }
-        return;
+        const { error } = await supabase.from("produtos").delete().eq("id", productId);
+        if (error) throw error;
       }
-
       if (markInactive) {
         setProducts((current) => current.map((product) => product.id === productId ? { ...product, status: "Inativo" } : product));
-        showToast("Produto vinculado a vendas foi marcado como inativo.");
-        return;
+        return showToast("Produto vinculado a vendas foi marcado como inativo.");
       }
       setProducts((current) => current.filter((product) => product.id !== productId));
       showToast("Produto removido com sucesso.");
-    } catch (error) {
+    } catch {
       showToast("Não foi possível alterar o produto no banco.");
     }
   };
 
   const saveCustomer = async (form) => {
-    if (!form.name || !form.phone) {
-      showToast("Preencha nome e telefone do cliente.");
-      return false;
-    }
-
+    if (!form.name || !form.phone) return showToast("Preencha nome e telefone do cliente."), false;
     const customer = { ...form, id: form.id || getNextId(customers), status: form.status || "Novo" };
-
     try {
       if (usingDatabase) {
         if (form.id) {
           const { data, error } = await supabase.from("clientes").update(clienteParaBanco(customer)).eq("id", form.id).select().single();
           if (error) throw error;
-          const updatedCustomer = clienteDoBanco(data);
-          setCustomers((current) => current.map((item) => item.id === form.id ? updatedCustomer : item));
+          setCustomers((current) => current.map((item) => item.id === form.id ? clienteDoBanco(data) : item));
         } else {
           const { data, error } = await supabase.from("clientes").insert(clienteParaBanco(customer)).select().single();
           if (error) throw error;
@@ -393,10 +317,9 @@ function App() {
       } else {
         setCustomers((current) => form.id ? current.map((item) => item.id === form.id ? customer : item) : [...current, customer]);
       }
-
       showToast(form.id ? "Cliente atualizado com sucesso." : "Cliente cadastrado com sucesso.");
       return true;
-    } catch (error) {
+    } catch {
       showToast("Não foi possível salvar o cliente no banco.");
       return false;
     }
@@ -404,31 +327,24 @@ function App() {
 
   const deleteCustomer = async (customerId) => {
     const customerHasSales = sales.some((sale) => sale.customerId === customerId);
-
     try {
       if (usingDatabase) {
         if (customerHasSales) {
           const { error } = await supabase.from("clientes").update({ status: "Inativo" }).eq("id", customerId);
           if (error) throw error;
           setCustomers((current) => current.map((customer) => customer.id === customerId ? { ...customer, status: "Inativo" } : customer));
-          showToast("Cliente vinculado a vendas foi marcado como inativo.");
-        } else {
-          const { error } = await supabase.from("clientes").delete().eq("id", customerId);
-          if (error) throw error;
-          setCustomers((current) => current.filter((customer) => customer.id !== customerId));
-          showToast("Cliente removido com sucesso.");
+          return showToast("Cliente vinculado a vendas foi marcado como inativo.");
         }
-        return;
+        const { error } = await supabase.from("clientes").delete().eq("id", customerId);
+        if (error) throw error;
       }
-
       if (customerHasSales) {
         setCustomers((current) => current.map((customer) => customer.id === customerId ? { ...customer, status: "Inativo" } : customer));
-        showToast("Cliente vinculado a vendas foi marcado como inativo.");
-        return;
+        return showToast("Cliente vinculado a vendas foi marcado como inativo.");
       }
       setCustomers((current) => current.filter((customer) => customer.id !== customerId));
       showToast("Cliente removido com sucesso.");
-    } catch (error) {
+    } catch {
       showToast("Não foi possível alterar o cliente no banco.");
     }
   };
@@ -438,10 +354,7 @@ function App() {
     if (product.stock <= 0) return showToast("Estoque insuficiente para este produto.");
     const existing = cart.find((item) => item.productId === product.id);
     if (existing && existing.qty + 1 > product.stock) return showToast("Quantidade maior que o estoque disponível.");
-    setCart((current) => existing
-      ? current.map((item) => item.productId === product.id ? { ...item, qty: item.qty + 1 } : item)
-      : [...current, { productId: product.id, name: product.name, qty: 1, price: product.price }]
-    );
+    setCart((current) => existing ? current.map((item) => item.productId === product.id ? { ...item, qty: item.qty + 1 } : item) : [...current, { productId: product.id, name: product.name, qty: 1, price: product.price }]);
   };
 
   const updateCartQty = (productId, qty) => {
@@ -458,30 +371,13 @@ function App() {
       return !product || product.status !== "Ativo" || product.stock < item.qty;
     });
     if (hasStockError) return showToast("Existe produto inativo ou com estoque insuficiente no carrinho.");
-
-    const customer = customers.find((item) => item.id === Number(customerId));
-    const id = getNextId(sales, 1001);
     const subtotal = cart.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0);
     const finalTotal = Math.max(subtotal - (Number(discount) || 0), 0);
     const paidValue = Number(amountPaid) || 0;
-
-    if (payment === "Dinheiro" && paidValue < finalTotal) {
-      showToast("Valor recebido em dinheiro é menor que o total da venda.");
-      return;
-    }
-
-    const newSale = {
-      id,
-      date: today,
-      customerId: customer?.id || null,
-      customerName: customer?.name || "Cliente não informado",
-      payment: payment || "PIX",
-      discount: Number(discount) || 0,
-      amountPaid: payment === "Dinheiro" ? paidValue : finalTotal,
-      change: payment === "Dinheiro" ? Math.max(Number(change) || 0, 0) : 0,
-      status: "Concluída",
-      items: cart.map((item) => ({ ...item })),
-    }; 
+    if (payment === "Dinheiro" && paidValue < finalTotal) return showToast("Valor recebido em dinheiro é menor que o total da venda.");
+    const customer = customers.find((item) => item.id === Number(customerId));
+    const id = getNextId(sales, 1001);
+    const newSale = { id, date: today, customerId: customer?.id || null, customerName: customer?.name || "Cliente não informado", payment: payment || "PIX", discount: Number(discount) || 0, amountPaid: payment === "Dinheiro" ? paidValue : finalTotal, change: payment === "Dinheiro" ? Math.max(Number(change) || 0, 0) : 0, status: "Concluída", items: cart.map((item) => ({ ...item })) };
     const newMovements = cart.map((item, index) => ({ id: getNextId(movements) + index, date: today, productName: item.name, type: "Venda", qty: -item.qty, user: "Administrador" }));
     setSales((current) => [newSale, ...current]);
     setProducts((current) => current.map((product) => {
@@ -514,7 +410,6 @@ function App() {
     showToast(`Entrada de ${qty} unidades registrada.`);
   };
 
-  const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0), [cart]);
   const handleNavigate = (key) => { setActive(key); setSidebarOpen(false); };
 
   const renderContent = () => {
@@ -529,56 +424,25 @@ function App() {
     return null;
   };
 
-  if (!logged) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-800 to-emerald-700 flex items-center justify-center p-6">
-        <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl grid md:grid-cols-2">
-          <div className="p-10 bg-slate-950 text-white flex flex-col justify-between min-h-[520px]">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-emerald-500 p-3"><Building2 /></div>
-                <div>
-                  <p className="text-sm text-blue-100">Projeto Integrador UNIVESP</p>
-                  <h1 className="text-2xl font-bold">Gestão Comercial Integrada</h1>
-                </div>
-              </div>
-              <p className="mt-8 text-lg leading-relaxed text-slate-200">Sistema web com PDV, estoque, clientes, CRM e relatórios para apoiar pequenos negócios na organização comercial.</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-2xl bg-white/10 p-4">Cadastros reais</div>
-              <div className="rounded-2xl bg-white/10 p-4">Persistência local</div>
-              <div className="rounded-2xl bg-white/10 p-4">PDV completo</div>
-              <div className="rounded-2xl bg-white/10 p-4">Relatórios</div>
-            </div>
-          </div>
-          <div className="p-10 flex flex-col justify-center">
-            <h2 className="text-3xl font-bold text-slate-950">Entrar no sistema</h2>
-            <p className="mt-2 text-slate-500">Acesso administrativo para demonstração funcional.</p>
-            <div className="mt-8 space-y-4">
-              <Input label="E-mail" defaultValue="admin@demo.com" />
-              <Input label="Senha" type="password" defaultValue="123456" />
-              <button onClick={() => setLogged(true)} className="w-full rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 flex items-center justify-center gap-2"><LogIn size={18} /> Entrar</button>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    );
+  if (authLoading) {
+    return <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6"><div className="rounded-3xl bg-white p-8 shadow-sm border border-slate-100 text-center"><div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-blue-100 border-t-blue-700" /><p className="font-semibold text-slate-700">Carregando sistema...</p></div></div>;
+  }
+
+  if (!session) {
+    return <AuthScreen authMode={authMode} setAuthMode={setAuthMode} authForm={authForm} setAuthForm={setAuthForm} onLogin={handleLogin} onSignUp={handleSignUp} loading={authLoading} />;
   }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       {toast && <div className="fixed right-6 top-6 z-50 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white shadow-xl">{toast}</div>}
-      <Sidebar active={active} onNavigate={handleNavigate} onLogout={() => setLogged(false)} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar active={active} menuItems={visibleMenu} onNavigate={handleNavigate} onLogout={handleLogout} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <main className="lg:ml-72 p-4 md:p-8">
         <div className="mb-6 rounded-3xl bg-white p-4 shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden rounded-2xl border border-slate-200 p-3 text-slate-700"><Menu size={20} /></button>
-            <div>
-              <p className="text-sm text-slate-500">Projeto Integrador — UNIVESP</p>
-              <h2 className="font-bold text-slate-950">Painel administrativo para pequenos negócios</h2>
-            </div>
+            <div><p className="text-sm text-slate-500">Projeto Integrador — UNIVESP</p><h2 className="font-bold text-slate-950">Painel administrativo para pequenos negócios</h2></div>
           </div>
-          <div className="flex items-center gap-3"><Badge tone="green">Administrador</Badge><Badge tone={usingDatabase ? "green" : "blue"}>{usingDatabase ? "Banco Supabase conectado" : "Dados salvos localmente"}</Badge></div>
+          <div className="flex items-center gap-3"><Badge tone="green">{userProfile?.perfil || "Usuário"}</Badge><Badge tone={usingDatabase ? "green" : "blue"}>{usingDatabase ? "Banco Supabase conectado" : "Dados salvos localmente"}</Badge></div>
         </div>
         {renderContent()}
       </main>
@@ -586,98 +450,72 @@ function App() {
   );
 }
 
-function Input({ label, value, onChange, type = "text", defaultValue, placeholder }) {
+function AuthScreen({ authMode, setAuthMode, authForm, setAuthForm, onLogin, onSignUp, loading }) {
+  const update = (key, value) => setAuthForm((current) => ({ ...current, [key]: value }));
+  const isLogin = authMode === "login";
   return (
-    <label className="block">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
-      <input type={type} value={value} onChange={onChange} defaultValue={defaultValue} placeholder={placeholder} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" />
-    </label>
-  );
-}
-
-function Select({ label, value, onChange, children }) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
-      <select value={value} onChange={onChange} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 bg-white">{children}</select>
-    </label>
-  );
-}
-
-function Modal({ title, children, onClose }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-      <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-3xl rounded-3xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-        <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold text-slate-950">{title}</h2><button onClick={onClose} className="rounded-xl p-2 hover:bg-slate-100"><X size={20} /></button></div>
-        {children}
+    <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-800 to-emerald-700 flex items-center justify-center p-6">
+      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl grid md:grid-cols-2">
+        <div className="p-10 bg-slate-950 text-white flex flex-col justify-between min-h-[560px]"><div><div className="flex items-center gap-3"><div className="rounded-2xl bg-emerald-500 p-3"><Building2 /></div><div><p className="text-sm text-blue-100">Projeto Integrador UNIVESP</p><h1 className="text-2xl font-bold">Gestão Comercial Integrada</h1></div></div><p className="mt-8 text-lg leading-relaxed text-slate-200">Sistema web com autenticação real, perfis de acesso, PDV, estoque, clientes, CRM e banco Supabase.</p></div><div className="grid grid-cols-2 gap-3 text-sm"><div className="rounded-2xl bg-white/10 p-4">Login real</div><div className="rounded-2xl bg-white/10 p-4">Cadastro de usuário</div><div className="rounded-2xl bg-white/10 p-4">Administrador</div><div className="rounded-2xl bg-white/10 p-4">Operador</div></div></div>
+        <div className="p-10 flex flex-col justify-center"><div className="mb-6 flex rounded-2xl bg-slate-100 p-1"><button onClick={() => setAuthMode("login")} className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold ${isLogin ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>Entrar</button><button onClick={() => setAuthMode("signup")} className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold ${!isLogin ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>Criar conta</button></div><h2 className="text-3xl font-bold text-slate-950">{isLogin ? "Entrar no sistema" : "Cadastrar usuário"}</h2><p className="mt-2 text-slate-500">{isLogin ? "Acesse com e-mail e senha cadastrados no Supabase." : "Crie um usuário e defina o perfil de acesso."}</p><div className="mt-8 space-y-4">{!isLogin && <Input label="Nome" value={authForm.name} onChange={(e) => update("name", e.target.value)} placeholder="Nome do usuário" />}<Input label="E-mail" value={authForm.email} onChange={(e) => update("email", e.target.value)} placeholder="email@exemplo.com" /><Input label="Senha" type="password" value={authForm.password} onChange={(e) => update("password", e.target.value)} placeholder="Mínimo 6 caracteres" />{!isLogin && <Select label="Perfil" value={authForm.profile} onChange={(e) => update("profile", e.target.value)}><option>Administrador</option><option>Operador</option></Select>}<button onClick={isLogin ? onLogin : onSignUp} disabled={loading} className="w-full rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2">{isLogin ? <LogIn size={18} /> : <UserPlus size={18} />}{loading ? "Aguarde..." : isLogin ? "Entrar" : "Criar conta"}</button></div></div>
       </motion.div>
     </div>
   );
 }
 
-function Sidebar({ active, onNavigate, onLogout, open, onClose }) {
-  return (
-    <>
-      {open && <button aria-label="Fechar menu" onClick={onClose} className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" />}
-      <aside className={`fixed left-0 top-0 z-40 h-full w-72 bg-slate-950 text-white p-5 flex flex-col transition-transform duration-300 ${open ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}>
-        <div className="flex items-center justify-between border-b border-white/10 pb-5">
-          <div className="flex items-center gap-3"><div className="rounded-2xl bg-emerald-500 p-3"><Building2 size={22} /></div><div><p className="text-xs text-blue-100">Sistema Web</p><h2 className="font-bold leading-tight">Gestão Comercial Integrada</h2></div></div>
-          <button onClick={onClose} className="lg:hidden rounded-xl p-2 hover:bg-white/10"><X size={18} /></button>
-        </div>
-        <nav className="mt-6 space-y-2 flex-1">
-          {menu.map((item) => { const Icon = item.icon; return <button key={item.key} onClick={() => onNavigate(item.key)} className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${active === item.key ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/10"}`}><Icon size={18} /> {item.label}</button>; })}
-        </nav>
-        <button onClick={onLogout} className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-300 hover:bg-white/10"><LogOut size={18} /> Sair</button>
-      </aside>
-    </>
-  );
+function Input({ label, value, onChange, type = "text", defaultValue, placeholder }) {
+  return <label className="block"><span className="text-sm font-medium text-slate-700">{label}</span><input type={type} value={value} onChange={onChange} defaultValue={defaultValue} placeholder={placeholder} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" /></label>;
 }
 
-function Dashboard({ totalToday, totalMonth, products, customers, lowStock, salesByDay, productSales, paymentData, resetData }) {
-  return (
-    <div>
-      <SectionTitle title="Dashboard" subtitle="Visão geral das vendas, estoque, clientes e indicadores comerciais." actions={<button onClick={resetData} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><RotateCcw size={16} /> Restaurar dados</button>} />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Vendas do dia" value={currency(totalToday)} icon={Wallet} caption="Atualizado em tempo real" />
-        <StatCard title="Vendas do mês" value={currency(totalMonth)} icon={CreditCard} caption="Total de vendas concluídas" />
-        <StatCard title="Produtos cadastrados" value={products.length} icon={Package} caption="Produtos ativos e inativos" />
-        <StatCard title="Clientes cadastrados" value={customers.length} icon={Users} caption="Base de relacionamento" />
-      </div>
-      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Baixo estoque" value={lowStock.length} icon={Boxes} caption="Itens abaixo do mínimo" />
-        <StatCard title="Valor em estoque" value={currency(products.reduce((sum, product) => sum + product.stock * product.cost, 0))} icon={BarChart3} caption="Custo estimado" />
-      </div>
-      <div className="mt-6 grid gap-5 xl:grid-cols-2">
-        <ChartCard title="Vendas por dia"><ResponsiveContainer width="100%" height={260}><BarChart data={salesByDay}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip formatter={(value) => currency(value)} /><Bar dataKey="total" fill="#2563eb" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard>
-        <ChartCard title="Produtos mais vendidos"><ResponsiveContainer width="100%" height={260}><BarChart data={productSales}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis /><Tooltip /><Bar dataKey="qty" fill="#059669" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard>
-      </div>
-      <div className="mt-6 grid gap-5 xl:grid-cols-2">
-        <ChartCard title="Formas de pagamento"><ResponsiveContainer width="100%" height={260}><PieChart><Pie data={paymentData} dataKey="value" nameKey="name" outerRadius={90} label>{paymentData.map((entry, index) => <Cell key={entry.name} fill={chartColors[index % chartColors.length]} />)}</Pie><Tooltip formatter={(value) => currency(value)} /></PieChart></ResponsiveContainer></ChartCard>
-        <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold text-slate-950">Alertas de estoque</h3><div className="mt-4 space-y-3">{lowStock.length === 0 && <p className="text-sm text-slate-400">Nenhum produto abaixo do estoque mínimo.</p>}{lowStock.map((product) => <div key={product.id} className="flex items-center justify-between rounded-2xl bg-amber-50 p-4"><span>{product.name}</span><Badge tone="amber">{product.stock} un.</Badge></div>)}</div></div>
-      </div>
-    </div>
-  );
+function Select({ label, value, onChange, children }) {
+  return <label className="block"><span className="text-sm font-medium text-slate-700">{label}</span><select value={value} onChange={onChange} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 bg-white">{children}</select></label>;
+}
+
+function Modal({ title, children, onClose }) {
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"><motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-3xl rounded-3xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto"><div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold text-slate-950">{title}</h2><button onClick={onClose} className="rounded-xl p-2 hover:bg-slate-100"><X size={20} /></button></div>{children}</motion.div></div>;
+}
+
+function Badge({ children, tone = "blue" }) {
+  const styles = { blue: "bg-blue-50 text-blue-700", green: "bg-emerald-50 text-emerald-700", red: "bg-red-50 text-red-700", amber: "bg-amber-50 text-amber-700", slate: "bg-slate-100 text-slate-700" };
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${styles[tone] || styles.blue}`}>{children}</span>;
+}
+
+function Sidebar({ active, menuItems, onNavigate, onLogout, open, onClose }) {
+  return <>{open && <button aria-label="Fechar menu" onClick={onClose} className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" />}<aside className={`fixed left-0 top-0 z-40 h-full w-72 bg-slate-950 text-white p-5 flex flex-col transition-transform duration-300 ${open ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}><div className="flex items-center justify-between border-b border-white/10 pb-5"><div className="flex items-center gap-3"><div className="rounded-2xl bg-emerald-500 p-3"><Building2 size={22} /></div><div><p className="text-xs text-blue-100">Sistema Web</p><h2 className="font-bold leading-tight">Gestão Comercial Integrada</h2></div></div><button onClick={onClose} className="lg:hidden rounded-xl p-2 hover:bg-white/10"><X size={18} /></button></div><nav className="mt-6 space-y-2 flex-1">{menuItems.map((item) => { const Icon = item.icon; return <button key={item.key} onClick={() => onNavigate(item.key)} className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${active === item.key ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/10"}`}><Icon size={18} /> {item.label}</button>; })}</nav><button onClick={onLogout} className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-300 hover:bg-white/10"><LogOut size={18} /> Sair</button></aside></>;
+}
+
+function SectionTitle({ title, subtitle, actions }) {
+  return <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><h1 className="text-2xl font-bold text-slate-950">{title}</h1><p className="mt-1 text-sm text-slate-500">{subtitle}</p></div>{actions}</div>;
+}
+
+function StatCard({ title, value, icon: Icon, caption }) {
+  return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100"><div className="flex items-start justify-between gap-4"><div><p className="text-sm text-slate-500">{title}</p><h3 className="mt-1 text-2xl font-bold text-slate-900">{value}</h3>{caption && <p className="mt-1 text-xs text-slate-400">{caption}</p>}</div><div className="rounded-2xl bg-blue-50 p-3 text-blue-700"><Icon size={22} /></div></div></motion.div>;
 }
 
 function ChartCard({ title, children }) {
   return <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="mb-4 font-bold text-slate-950">{title}</h3>{children}</div>;
 }
 
+function Dashboard({ totalToday, totalMonth, products, customers, lowStock, salesByDay, productSales, paymentData, resetData }) {
+  return <div><SectionTitle title="Dashboard" subtitle="Visão geral das vendas, estoque, clientes e indicadores comerciais." actions={<button onClick={resetData} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><RotateCcw size={16} /> Restaurar dados</button>} /><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><StatCard title="Vendas do dia" value={currency(totalToday)} icon={Wallet} caption="Atualizado em tempo real" /><StatCard title="Vendas do mês" value={currency(totalMonth)} icon={CreditCard} caption="Total de vendas concluídas" /><StatCard title="Produtos cadastrados" value={products.length} icon={Package} caption="Produtos ativos e inativos" /><StatCard title="Clientes cadastrados" value={customers.length} icon={Users} caption="Base de relacionamento" /></div><div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4"><StatCard title="Baixo estoque" value={lowStock.length} icon={Boxes} caption="Itens abaixo do mínimo" /><StatCard title="Valor em estoque" value={currency(products.reduce((sum, product) => sum + product.stock * product.cost, 0))} icon={BarChart3} caption="Custo estimado" /></div><div className="mt-6 grid gap-5 xl:grid-cols-2"><ChartCard title="Vendas por dia"><ResponsiveContainer width="100%" height={260}><BarChart data={salesByDay}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip formatter={(value) => currency(value)} /><Bar dataKey="total" fill="#2563eb" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard><ChartCard title="Produtos mais vendidos"><ResponsiveContainer width="100%" height={260}><BarChart data={productSales}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis /><Tooltip /><Bar dataKey="qty" fill="#059669" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard></div><div className="mt-6 grid gap-5 xl:grid-cols-2"><ChartCard title="Formas de pagamento"><ResponsiveContainer width="100%" height={260}><PieChart><Pie data={paymentData} dataKey="value" nameKey="name" outerRadius={90} label>{paymentData.map((entry, index) => <Cell key={entry.name} fill={chartColors[index % chartColors.length]} />)}</Pie><Tooltip formatter={(value) => currency(value)} /></PieChart></ResponsiveContainer></ChartCard><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold text-slate-950">Alertas de estoque</h3><div className="mt-4 space-y-3">{lowStock.length === 0 && <p className="text-sm text-slate-400">Nenhum produto abaixo do estoque mínimo.</p>}{lowStock.map((product) => <div key={product.id} className="flex items-center justify-between rounded-2xl bg-amber-50 p-4"><span>{product.name}</span><Badge tone="amber">{product.stock} un.</Badge></div>)}</div></div></div></div>;
+}
+
+function Toolbar({ query, setQuery, placeholder, button, onClick }) {
+  return <div className="mb-5 flex flex-col md:flex-row gap-3 md:items-center md:justify-between"><div className="relative flex-1"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div><button onClick={onClick} className="rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 flex items-center justify-center gap-2"><Plus size={18} /> {button}</button></div>;
+}
+
+function DataTable({ headers, children }) {
+  return <div className="overflow-hidden rounded-3xl bg-white shadow-sm border border-slate-100"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr>{headers.map((header) => <th key={header} className="p-4 font-semibold whitespace-nowrap">{header}</th>)}</tr></thead><tbody>{children}</tbody></table></div></div>;
+}
+
 function Products({ products, saveProduct, deleteProduct }) {
   const [query, setQuery] = useState("");
-  const [modal, setModal] = useState(null);
+  const [modal, setModal] = useState(false);
   const [form, setForm] = useState(emptyProduct);
   const filtered = products.filter((product) => `${product.name} ${product.sku} ${product.category}`.toLowerCase().includes(query.toLowerCase()));
-  const openForm = (product) => { setForm(product ? { ...product } : emptyProduct); setModal(product ? "edit" : "new"); };
-  const submit = () => { if (saveProduct(form)) setModal(null); };
-  return (
-    <div>
-      <SectionTitle title="Produtos" subtitle="Cadastro real, edição, pesquisa e alerta de estoque mínimo." />
-      <Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar produto, SKU ou categoria..." button="Novo produto" onClick={() => openForm()} />
-      <DataTable headers={["Produto", "SKU", "Categoria", "Preço", "Estoque", "Status", "Ações"]}>{filtered.map((product) => <tr key={product.id} className="border-t border-slate-100"><td className="p-4"><b>{product.name}</b><p className="text-xs text-slate-500">{product.description}</p></td><td className="p-4">{product.sku}</td><td className="p-4">{product.category}</td><td className="p-4">{currency(product.price)}</td><td className="p-4">{product.stock <= product.minStock ? <Badge tone="amber">{product.stock} baixo</Badge> : `${product.stock} un.`}</td><td className="p-4"><Badge tone={product.status === "Ativo" ? "green" : "slate"}>{product.status}</Badge></td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(product)} className="text-blue-700"><Edit3 size={18} /></button><button onClick={() => deleteProduct(product.id)} className="text-red-600"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>
-      {modal && <Modal title={modal === "edit" ? "Editar produto" : "Cadastrar produto"} onClose={() => setModal(null)}><ProductForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}
-    </div>
-  );
+  const openForm = (product) => { setForm(product ? { ...product } : emptyProduct); setModal(true); };
+  const submit = async () => { if (await saveProduct(form)) setModal(false); };
+  return <div><SectionTitle title="Produtos" subtitle="Cadastro real, edição, pesquisa e alerta de estoque mínimo." /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar produto, SKU ou categoria..." button="Novo produto" onClick={() => openForm()} /><DataTable headers={["Produto", "SKU", "Categoria", "Preço", "Estoque", "Status", "Ações"]}>{filtered.map((product) => <tr key={product.id} className="border-t border-slate-100"><td className="p-4"><b>{product.name}</b><p className="text-xs text-slate-500">{product.description}</p></td><td className="p-4">{product.sku}</td><td className="p-4">{product.category}</td><td className="p-4">{currency(product.price)}</td><td className="p-4">{product.stock <= product.minStock ? <Badge tone="amber">{product.stock} baixo</Badge> : `${product.stock} un.`}</td><td className="p-4"><Badge tone={product.status === "Ativo" ? "green" : "slate"}>{product.status}</Badge></td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(product)} className="text-blue-700"><Edit3 size={18} /></button><button onClick={() => deleteProduct(product.id)} className="text-red-600"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={form.id ? "Editar produto" : "Cadastrar produto"} onClose={() => setModal(false)}><ProductForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
 }
 
 function ProductForm({ form, setForm, onSubmit }) {
@@ -700,18 +538,17 @@ function PDV({ products, customers, cart, addToCart, updateCartQty, removeFromCa
   const finalTotal = Math.max(cartTotal - (Number(discount) || 0), 0);
   const change = payment === "Dinheiro" ? Math.max((Number(amountPaid) || 0) - finalTotal, 0) : 0;
   const insufficientCash = payment === "Dinheiro" && cart.length > 0 && (Number(amountPaid) || 0) < finalTotal;
-
   return <div><SectionTitle title="PDV / Frente de Caixa" subtitle="Venda com cliente, desconto, forma de pagamento, dinheiro e cálculo automático de troco." /><div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]"><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><div className="relative mb-4"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar produto por nome ou SKU..." className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div><div className="grid gap-3 md:grid-cols-2">{filtered.map((product) => <button key={product.id} onClick={() => addToCart(product)} className="text-left rounded-2xl border border-slate-100 p-4 hover:border-blue-300 hover:bg-blue-50"><div className="flex justify-between gap-3"><b>{product.name}</b><span className="font-bold text-blue-700">{currency(product.price)}</span></div><p className="text-xs text-slate-500">SKU {product.sku} • estoque {product.stock}</p></button>)}</div></div><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold flex items-center gap-2"><ShoppingCart size={18} /> Carrinho</h3><div className="mt-4 space-y-3 min-h-[170px]">{cart.length === 0 && <p className="text-sm text-slate-400">Nenhum produto adicionado.</p>}{cart.map((item) => <div key={item.productId} className="rounded-2xl bg-slate-50 p-4"><div className="flex justify-between gap-3"><b>{item.name}</b><button onClick={() => removeFromCart(item.productId)} className="text-red-600"><Trash2 size={16} /></button></div><div className="mt-2 flex items-center justify-between gap-3"><input type="number" min="1" value={item.qty} onChange={(e) => updateCartQty(item.productId, e.target.value)} className="w-20 rounded-xl border border-slate-200 px-3 py-2" /><p className="text-sm text-slate-500">{currency(item.qty * item.price)}</p></div></div>)}</div><div className="mt-5 border-t border-slate-100 pt-5 space-y-3"><Select label="Cliente" value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">Cliente não informado</option>{customers.filter((c) => c.status !== "Inativo").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select><Select label="Forma de pagamento" value={payment} onChange={(e) => setPayment(e.target.value)}><option>PIX</option><option>Dinheiro</option><option>Cartão de débito</option><option>Cartão de crédito</option><option>Outros</option></Select><Input label="Desconto" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} />{payment === "Dinheiro" && <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 space-y-3"><Input label="Valor recebido em dinheiro" type="number" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} /><div className="flex justify-between text-sm"><span>Valor recebido</span><b>{currency(amountPaid)}</b></div><div className="flex justify-between text-sm"><span>Troco</span><b className="text-emerald-700">{currency(change)}</b></div>{insufficientCash && <p className="text-sm font-medium text-red-600">Valor recebido menor que o total da venda.</p>}</div>}<div className="flex justify-between text-sm"><span>Subtotal</span><b>{currency(cartTotal)}</b></div><div className="flex justify-between text-sm"><span>Desconto</span><b>{currency(discount)}</b></div><div className="flex justify-between text-lg font-bold"><span>Total</span><span>{currency(finalTotal)}</span></div><button onClick={() => finishSale({ customerId, payment, discount, amountPaid, change })} disabled={insufficientCash} className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Finalizar venda</button></div></div></div></div>;
 }
 
 function Customers({ customers, saveCustomer, deleteCustomer, sales }) {
   const [query, setQuery] = useState("");
-  const [modal, setModal] = useState(null);
+  const [modal, setModal] = useState(false);
   const [form, setForm] = useState(emptyCustomer);
   const filtered = customers.filter((customer) => `${customer.name} ${customer.phone} ${customer.email}`.toLowerCase().includes(query.toLowerCase()));
-  const openForm = (customer) => { setForm(customer ? { ...customer } : emptyCustomer); setModal(customer ? "edit" : "new"); };
-  const submit = () => { if (saveCustomer(form)) setModal(null); };
-  return <div><SectionTitle title="Clientes" subtitle="Cadastro real, pesquisa e histórico de relacionamento do cliente." /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar cliente..." button="Novo cliente" onClick={() => openForm()} /><DataTable headers={["Cliente", "Contato", "Endereço", "Status", "Compras", "Ações"]}>{filtered.map((customer) => <tr key={customer.id} className="border-t border-slate-100"><td className="p-4"><b>{customer.name}</b><p className="text-xs text-slate-500">{customer.email}</p></td><td className="p-4">{customer.phone}</td><td className="p-4">{customer.address}</td><td className="p-4"><Badge tone={customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></td><td className="p-4">{sales.filter((sale) => sale.customerId === customer.id).length}</td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(customer)} className="text-blue-700"><Edit3 size={18} /></button><button onClick={() => deleteCustomer(customer.id)} className="text-red-600"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={modal === "edit" ? "Editar cliente" : "Cadastrar cliente"} onClose={() => setModal(null)}><CustomerForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
+  const openForm = (customer) => { setForm(customer ? { ...customer } : emptyCustomer); setModal(true); };
+  const submit = async () => { if (await saveCustomer(form)) setModal(false); };
+  return <div><SectionTitle title="Clientes" subtitle="Cadastro real, pesquisa e histórico de relacionamento do cliente." /><Toolbar query={query} setQuery={setQuery} placeholder="Pesquisar cliente..." button="Novo cliente" onClick={() => openForm()} /><DataTable headers={["Cliente", "Contato", "Endereço", "Status", "Compras", "Ações"]}>{filtered.map((customer) => <tr key={customer.id} className="border-t border-slate-100"><td className="p-4"><b>{customer.name}</b><p className="text-xs text-slate-500">{customer.email}</p></td><td className="p-4">{customer.phone}</td><td className="p-4">{customer.address}</td><td className="p-4"><Badge tone={customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></td><td className="p-4">{sales.filter((sale) => sale.customerId === customer.id).length}</td><td className="p-4"><div className="flex gap-3"><button onClick={() => openForm(customer)} className="text-blue-700"><Edit3 size={18} /></button><button onClick={() => deleteCustomer(customer.id)} className="text-red-600"><Trash2 size={18} /></button></div></td></tr>)}</DataTable>{modal && <Modal title={form.id ? "Editar cliente" : "Cadastrar cliente"} onClose={() => setModal(false)}><CustomerForm form={form} setForm={setForm} onSubmit={submit} /></Modal>}</div>;
 }
 
 function CustomerForm({ form, setForm, onSubmit }) {
@@ -724,43 +561,12 @@ function CRM({ customers, sales }) {
 }
 
 function Sales({ sales, cancelSale }) {
-  return (
-    <div>
-      <SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas, detalhes, pagamento e cancelamento com devolução ao estoque." />
-      <DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Recebido", "Troco", "Desconto", "Total", "Status", "Ações"]}>
-        {sales.map((sale) => (
-          <tr key={sale.id} className="border-t border-slate-100">
-            <td className="p-4 font-bold">#{sale.id}</td>
-            <td className="p-4">{sale.date}</td>
-            <td className="p-4">{sale.customerName || "Não informado"}</td>
-            <td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td>
-            <td className="p-4">{sale.payment}</td>
-            <td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.amountPaid) : "—"}</td>
-            <td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.change) : "—"}</td>
-            <td className="p-4">{currency(sale.discount)}</td>
-            <td className="p-4 font-bold">{currency(getSaleTotal(sale))}</td>
-            <td className="p-4"><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{sale.status}</Badge></td>
-            <td className="p-4">
-              <button disabled={sale.status === "Cancelada"} onClick={() => cancelSale(sale)} className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 disabled:opacity-40">Cancelar</button>
-            </td>
-          </tr>
-        ))}
-      </DataTable>
-    </div>
-  );
+  return <div><SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas, detalhes, pagamento e cancelamento com devolução ao estoque." /><DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Recebido", "Troco", "Desconto", "Total", "Status", "Ações"]}>{sales.map((sale) => <tr key={sale.id} className="border-t border-slate-100"><td className="p-4 font-bold">#{sale.id}</td><td className="p-4">{sale.date}</td><td className="p-4">{sale.customerName || "Não informado"}</td><td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td><td className="p-4">{sale.payment}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.amountPaid) : "—"}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.change) : "—"}</td><td className="p-4">{currency(sale.discount)}</td><td className="p-4 font-bold">{currency(getSaleTotal(sale))}</td><td className="p-4"><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{sale.status}</Badge></td><td className="p-4"><button disabled={sale.status === "Cancelada"} onClick={() => cancelSale(sale)} className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 disabled:opacity-40">Cancelar</button></td></tr>)}</DataTable></div>;
 }
 
 function Reports({ sales, products, customers, productSales, paymentData, salesByDay }) {
   const total = sales.filter((sale) => sale.status === "Concluída").reduce((sum, sale) => sum + getSaleTotal(sale), 0);
   return <div><SectionTitle title="Relatórios" subtitle="Indicadores gerenciais para apoio à tomada de decisão." /><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><StatCard title="Receita total" value={currency(total)} icon={Wallet} /><StatCard title="Vendas concluídas" value={sales.filter((sale) => sale.status === "Concluída").length} icon={Receipt} /><StatCard title="Clientes" value={customers.length} icon={Users} /><StatCard title="Produtos baixo estoque" value={products.filter((product) => product.stock <= product.minStock).length} icon={Boxes} /></div><div className="mt-6 grid gap-5 xl:grid-cols-2"><ChartCard title="Vendas por período"><ResponsiveContainer width="100%" height={270}><BarChart data={salesByDay}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip formatter={(value) => currency(value)} /><Bar dataKey="total" fill="#2563eb" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard><ChartCard title="Produtos mais vendidos"><ResponsiveContainer width="100%" height={270}><BarChart data={productSales}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis /><Tooltip /><Bar dataKey="qty" fill="#059669" radius={[10, 10, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard></div><div className="mt-6 rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold mb-4">Vendas por forma de pagamento</h3><div className="grid gap-3 md:grid-cols-3">{paymentData.map((payment) => <div key={payment.name} className="rounded-2xl bg-slate-50 p-4"><p className="text-sm text-slate-500">{payment.name}</p><b>{currency(payment.value)}</b></div>)}{paymentData.length === 0 && <p className="text-sm text-slate-400">Nenhuma venda concluída no período demonstrativo.</p>}</div></div></div>;
-}
-
-function Toolbar({ query, setQuery, placeholder, button, onClick }) {
-  return <div className="mb-5 flex flex-col md:flex-row gap-3 md:items-center md:justify-between"><div className="relative flex-1"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div><button onClick={onClick} className="rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 flex items-center justify-center gap-2"><Plus size={18} /> {button}</button></div>;
-}
-
-function DataTable({ headers, children }) {
-  return <div className="overflow-hidden rounded-3xl bg-white shadow-sm border border-slate-100"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr>{headers.map((header) => <th key={header} className="p-4 font-semibold whitespace-nowrap">{header}</th>)}</tr></thead><tbody>{children}</tbody></table></div></div>;
 }
 
 export default App;
