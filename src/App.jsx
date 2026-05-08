@@ -486,16 +486,21 @@ function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       {toast && <div className="fixed right-6 top-6 z-50 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white shadow-xl">{toast}</div>}
       <Sidebar active={active} onNavigate={handleNavigate} onLogout={() => setLogged(false)} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <main className="lg:ml-72 p-4 md:p-8">
-        <div className="mb-6 rounded-3xl bg-white p-4 shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setSidebarOpen(true)} className="lg:hidden rounded-2xl border border-slate-200 p-3 text-slate-700"><Menu size={20} /></button>
-            <div>
-              <p className="text-sm text-slate-500">Projeto Integrador — UNIVESP</p>
-              <h2 className="font-bold text-slate-950">Painel administrativo para pequenos negócios</h2>
+      <main className="lg:ml-72 min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe_0,#f8fafc_34%,#f8fafc_100%)] p-4 md:p-8">
+        <div className="mb-6 overflow-hidden rounded-[2rem] border border-white/70 bg-white/80 p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-4">
+              <button onClick={() => setSidebarOpen(true)} className="lg:hidden rounded-2xl border border-slate-200 bg-white p-3 text-slate-700 shadow-sm"><Menu size={20} /></button>
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-700 to-emerald-500 text-white shadow-lg shadow-blue-900/20">
+                <BarChart3 size={22} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">Projeto Integrador — UNIVESP</p>
+                <h2 className="text-lg font-black text-slate-950 md:text-xl">Painel administrativo para pequenos negócios</h2>
+              </div>
             </div>
+            <div className="flex flex-wrap items-center gap-3"><Badge tone="green">Administrador</Badge><Badge tone={usingDatabase ? "green" : "blue"}>{usingDatabase ? "Banco Supabase conectado" : "Dados salvos localmente"}</Badge></div>
           </div>
-          <div className="flex items-center gap-3"><Badge tone="green">Administrador</Badge><Badge tone={usingDatabase ? "green" : "blue"}>{usingDatabase ? "Banco Supabase conectado" : "Dados salvos localmente"}</Badge></div>
         </div>
         {renderContent()}
       </main>
@@ -505,17 +510,47 @@ function App() {
 
 function LoginScreen({ onLogin }) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-950 via-blue-800 to-emerald-700 flex items-center justify-center p-6">
-      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl grid md:grid-cols-2">
-        <div className="p-10 bg-slate-950 text-white flex flex-col justify-between min-h-[520px]">
-          <div>
-            <div className="flex items-center gap-3"><div className="rounded-2xl bg-emerald-500 p-3"><Building2 /></div><div><p className="text-sm text-blue-100">Projeto Integrador UNIVESP</p><h1 className="text-2xl font-bold">Gestão Comercial Integrada</h1></div></div>
-            <p className="mt-8 text-lg leading-relaxed text-slate-200">Sistema web com PDV, estoque, clientes, CRM, relatórios e integração com banco Supabase para produtos e clientes.</p>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#2563eb_0,#0f172a_42%,#020617_100%)] p-6 text-white">
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl items-center justify-center">
+        <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} className="grid w-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/10 shadow-2xl shadow-slate-950/40 backdrop-blur-2xl md:grid-cols-[1.1fr_0.9fr]">
+          <div className="relative overflow-hidden p-8 md:p-12">
+            <div className="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-blue-500/30 blur-3xl" />
+            <div className="absolute -bottom-24 right-0 h-72 w-72 rounded-full bg-emerald-400/20 blur-3xl" />
+            <div className="relative z-10 flex min-h-[520px] flex-col justify-between">
+              <div>
+                <div className="inline-flex items-center gap-3 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 shadow-lg shadow-slate-950/10">
+                  <div className="rounded-xl bg-emerald-400 p-2 text-slate-950"><Building2 size={22} /></div>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.24em] text-blue-100">Sistema Web</p>
+                    <h1 className="font-black leading-tight">Gestão Comercial Integrada</h1>
+                  </div>
+                </div>
+                <h2 className="mt-10 max-w-xl text-4xl font-black leading-tight md:text-5xl">Controle comercial com PDV, estoque, clientes e relatórios.</h2>
+                <p className="mt-5 max-w-lg text-base leading-7 text-blue-100">Projeto Integrador desenvolvido para apoiar pequenos negócios na organização das vendas, cadastro de clientes, controle de estoque e acompanhamento gerencial.</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-3xl border border-white/10 bg-white/10 p-5"><p className="text-sm text-blue-100">Módulo</p><b className="mt-1 block text-lg">PDV com troco</b></div>
+                <div className="rounded-3xl border border-white/10 bg-white/10 p-5"><p className="text-sm text-blue-100">Banco</p><b className="mt-1 block text-lg">Supabase</b></div>
+                <div className="rounded-3xl border border-white/10 bg-white/10 p-5"><p className="text-sm text-blue-100">Gestão</p><b className="mt-1 block text-lg">Clientes e CRM</b></div>
+                <div className="rounded-3xl border border-white/10 bg-white/10 p-5"><p className="text-sm text-blue-100">Análise</p><b className="mt-1 block text-lg">Relatórios</b></div>
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 text-sm"><div className="rounded-2xl bg-white/10 p-4">PDV funcional</div><div className="rounded-2xl bg-white/10 p-4">Banco Supabase</div><div className="rounded-2xl bg-white/10 p-4">Clientes e CRM</div><div className="rounded-2xl bg-white/10 p-4">Relatórios</div></div>
-        </div>
-        <div className="p-10 flex flex-col justify-center"><h2 className="text-3xl font-bold text-slate-950">Entrar no sistema</h2><p className="mt-2 text-slate-500">Acesso administrativo para apresentação acadêmica.</p><div className="mt-8 space-y-4"><Input label="E-mail" defaultValue="admin@demo.com" /><Input label="Senha" type="password" defaultValue="123456" /><button onClick={onLogin} className="w-full rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 flex items-center justify-center gap-2"><LogIn size={18} /> Entrar</button></div></div>
-      </motion.div>
+          <div className="bg-white p-8 text-slate-950 md:p-12">
+            <div className="flex h-full flex-col justify-center">
+              <div className="mb-8 inline-flex w-fit items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700"><Wallet size={16} /> Acesso administrativo</div>
+              <h2 className="text-3xl font-black tracking-tight">Entrar no sistema</h2>
+              <p className="mt-2 text-slate-500">Acesse a versão funcional para apresentação acadêmica.</p>
+              <div className="mt-8 space-y-5">
+                <Input label="E-mail" defaultValue="admin@demo.com" />
+                <Input label="Senha" type="password" defaultValue="123456" />
+                <button onClick={onLogin} className="group w-full rounded-2xl bg-gradient-to-r from-blue-700 to-blue-600 px-5 py-4 font-bold text-white shadow-xl shadow-blue-700/20 transition hover:scale-[1.01] hover:shadow-blue-700/30 flex items-center justify-center gap-2"><LogIn size={18} /> Entrar no painel</button>
+              </div>
+              <p className="mt-6 text-center text-xs text-slate-400">Ambiente de demonstração integrado ao Supabase para produtos e clientes.</p>
+            </div>
+          </div>
+        </motion.div>
+      </div>
     </div>
   );
 }
@@ -533,24 +568,85 @@ function Modal({ title, children, onClose }) {
 }
 
 function Badge({ children, tone = "blue" }) {
-  const styles = { blue: "bg-blue-50 text-blue-700", green: "bg-emerald-50 text-emerald-700", red: "bg-red-50 text-red-700", amber: "bg-amber-50 text-amber-700", slate: "bg-slate-100 text-slate-700" };
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${styles[tone] || styles.blue}`}>{children}</span>;
+  const styles = { blue: "bg-blue-50 text-blue-700 ring-blue-100", green: "bg-emerald-50 text-emerald-700 ring-emerald-100", red: "bg-red-50 text-red-700 ring-red-100", amber: "bg-amber-50 text-amber-700 ring-amber-100", slate: "bg-slate-100 text-slate-700 ring-slate-200" };
+  return <span className={`inline-flex rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${styles[tone] || styles.blue}`}>{children}</span>;
 }
 
 function Sidebar({ active, onNavigate, onLogout, open, onClose }) {
-  return <>{open && <button aria-label="Fechar menu" onClick={onClose} className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" />}<aside className={`fixed left-0 top-0 z-40 h-full w-72 bg-slate-950 text-white p-5 flex flex-col transition-transform duration-300 ${open ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}><div className="flex items-center justify-between border-b border-white/10 pb-5"><div className="flex items-center gap-3"><div className="rounded-2xl bg-emerald-500 p-3"><Building2 size={22} /></div><div><p className="text-xs text-blue-100">Sistema Web</p><h2 className="font-bold leading-tight">Gestão Comercial Integrada</h2></div></div><button onClick={onClose} className="lg:hidden rounded-xl p-2 hover:bg-white/10"><X size={18} /></button></div><nav className="mt-6 space-y-2 flex-1">{menu.map((item) => { const Icon = item.icon; return <button key={item.key} onClick={() => onNavigate(item.key)} className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${active === item.key ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/10"}`}><Icon size={18} /> {item.label}</button>; })}</nav><button onClick={onLogout} className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-300 hover:bg-white/10"><LogOut size={18} /> Sair</button></aside></>;
+  return (
+    <>
+      {open && (
+        <button
+          aria-label="Fechar menu"
+          onClick={onClose}
+          className="fixed inset-0 z-30 bg-slate-950/50 backdrop-blur-sm lg:hidden"
+        />
+      )}
+
+      <aside
+        className={`fixed left-0 top-0 z-40 h-full w-72 bg-slate-950 text-white p-5 flex flex-col transition-transform duration-300 ${open ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
+      >
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#1d4ed8_0,#0f172a_38%,#020617_100%)]" />
+
+        <div className="relative z-10 flex h-full flex-col">
+          <div className="flex items-center justify-between border-b border-white/10 pb-5">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-gradient-to-br from-emerald-400 to-blue-500 p-3 text-white shadow-lg shadow-blue-950/40">
+                <Building2 size={22} />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.22em] text-blue-200">Sistema Web</p>
+                <h2 className="font-black leading-tight">Gestão Comercial Integrada</h2>
+              </div>
+            </div>
+            <button onClick={onClose} className="lg:hidden rounded-xl p-2 hover:bg-white/10">
+              <X size={18} />
+            </button>
+          </div>
+
+          <nav className="mt-7 space-y-2 flex-1">
+            {menu.map((item) => {
+              const Icon = item.icon;
+              const isActive = active === item.key;
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => onNavigate(item.key)}
+                  className={`group w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${isActive ? "bg-white text-blue-700 shadow-xl shadow-slate-950/20" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
+                >
+                  <span className={`rounded-xl p-2 transition ${isActive ? "bg-blue-50 text-blue-700" : "bg-white/5 text-slate-300 group-hover:bg-white/10 group-hover:text-white"}`}>
+                    <Icon size={17} />
+                  </span>
+                  <span className="font-semibold">{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
+            <p className="text-xs text-blue-100">Status do projeto</p>
+            <p className="mt-1 text-sm font-bold">Versão estável para apresentação</p>
+          </div>
+
+          <button onClick={onLogout} className="mt-4 flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-300 hover:bg-white/10">
+            <LogOut size={18} /> Sair
+          </button>
+        </div>
+      </aside>
+    </>
+  );
 }
 
 function SectionTitle({ title, subtitle, actions }) {
-  return <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><h1 className="text-2xl font-bold text-slate-950">{title}</h1><p className="mt-1 text-sm text-slate-500">{subtitle}</p></div>{actions}</div>;
+  return <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.24em] text-blue-700">Gestão Comercial</p><h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">{title}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{subtitle}</p></div>{actions}</div>;
 }
 
 function StatCard({ title, value, icon: Icon, caption }) {
-  return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100"><div className="flex items-start justify-between gap-4"><div><p className="text-sm text-slate-500">{title}</p><h3 className="mt-1 text-2xl font-bold text-slate-900">{value}</h3>{caption && <p className="mt-1 text-xs text-slate-400">{caption}</p>}</div><div className="rounded-2xl bg-blue-50 p-3 text-blue-700"><Icon size={22} /></div></div></motion.div>;
+  return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="group rounded-[1.75rem] border border-white/70 bg-white/90 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.07)] backdrop-blur transition hover:-translate-y-1 hover:shadow-[0_30px_80px_rgba(15,23,42,0.1)]"><div className="flex items-start justify-between gap-4"><div><p className="text-sm font-semibold text-slate-500">{title}</p><h3 className="mt-2 text-3xl font-black tracking-tight text-slate-950">{value}</h3>{caption && <p className="mt-2 text-xs font-medium text-slate-400">{caption}</p>}</div><div className="rounded-2xl bg-gradient-to-br from-blue-600 to-emerald-500 p-3 text-white shadow-lg shadow-blue-700/20 transition group-hover:scale-110"><Icon size={22} /></div></div></motion.div>;
 }
 
 function ChartCard({ title, children }) {
-  return <div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="mb-4 font-bold text-slate-950">{title}</h3>{children}</div>;
+  return <div className="rounded-[1.75rem] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.07)] backdrop-blur"><div className="mb-5 flex items-center justify-between"><h3 className="font-black text-slate-950">{title}</h3><span className="h-2 w-2 rounded-full bg-emerald-500" /></div>{children}</div>;
 }
 
 function Dashboard({ totalToday, totalMonth, products, customers, lowStock, salesByDay, productSales, paymentData, resetData }) {
@@ -558,11 +654,11 @@ function Dashboard({ totalToday, totalMonth, products, customers, lowStock, sale
 }
 
 function Toolbar({ query, setQuery, placeholder, button, onClick }) {
-  return <div className="mb-5 flex flex-col md:flex-row gap-3 md:items-center md:justify-between"><div className="relative flex-1"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div><button onClick={onClick} className="rounded-2xl bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800 flex items-center justify-center gap-2"><Plus size={18} /> {button}</button></div>;
+  return <div className="mb-5 flex flex-col md:flex-row gap-3 md:items-center md:justify-between"><div className="relative flex-1"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div><button onClick={onClick} className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-blue-700/20 transition hover:scale-[1.01] hover:shadow-blue-700/30 flex items-center justify-center gap-2"><Plus size={18} /> {button}</button></div>;
 }
 
 function DataTable({ headers, children }) {
-  return <div className="overflow-hidden rounded-3xl bg-white shadow-sm border border-slate-100"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr>{headers.map((header) => <th key={header} className="p-4 font-semibold whitespace-nowrap">{header}</th>)}</tr></thead><tbody>{children}</tbody></table></div></div>;
+  return <div className="overflow-hidden rounded-[1.75rem] border border-white/70 bg-white/90 shadow-[0_20px_60px_rgba(15,23,42,0.07)] backdrop-blur"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-950 text-slate-100"><tr>{headers.map((header) => <th key={header} className="p-4 text-xs font-black uppercase tracking-[0.16em] whitespace-nowrap">{header}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{children}</tbody></table></div></div>;
 }
 
 function Products({ products, saveProduct, deleteProduct }) {
@@ -582,7 +678,7 @@ function ProductForm({ form, setForm, onSubmit }) {
 
 function Stock({ products, movements, addStock }) {
   const [amounts, setAmounts] = useState({});
-  return <div><SectionTitle title="Estoque" subtitle="Controle de entrada, movimentações e produtos com baixo estoque." /><div className="grid gap-5 xl:grid-cols-2"><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold mb-4">Produtos em estoque</h3><div className="space-y-3">{products.map((product) => <div key={product.id} className="rounded-2xl border border-slate-100 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><b>{product.name}</b><p className="text-xs text-slate-500">Mínimo: {product.minStock} un. • {product.status}</p></div><Badge tone={product.stock <= product.minStock ? "amber" : "green"}>{product.stock} un.</Badge></div><div className="mt-3 flex gap-2"><input type="number" min="1" value={amounts[product.id] || 5} onChange={(e) => setAmounts((current) => ({ ...current, [product.id]: e.target.value }))} className="w-28 rounded-xl border border-slate-200 px-3 py-2" /><button onClick={() => addStock(product, amounts[product.id] || 5)} className="rounded-xl bg-blue-600 px-3 py-2 text-sm text-white">Registrar entrada</button></div></div>)}</div></div><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold mb-4">Histórico de movimentações</h3><div className="space-y-3">{movements.map((movement) => <div key={movement.id} className="rounded-2xl bg-slate-50 p-4"><div className="flex justify-between gap-3"><b>{movement.productName}</b><Badge tone={movement.qty < 0 ? "red" : "green"}>{movement.qty > 0 ? "+" : ""}{movement.qty}</Badge></div><p className="text-xs text-slate-500">{movement.type} • {movement.date} • {movement.user}</p></div>)}</div></div></div></div>;
+  return <div><SectionTitle title="Estoque" subtitle="Controle de entrada, movimentações e produtos com baixo estoque." /><div className="grid gap-5 xl:grid-cols-2"><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold mb-4">Produtos em estoque</h3><div className="space-y-3">{products.map((product) => <div key={product.id} className="rounded-2xl border border-slate-100 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><b>{product.name}</b><p className="text-xs text-slate-500">Mínimo: {product.minStock} un. • {product.status}</p></div><Badge tone={product.stock <= product.minStock ? "amber" : "green"}>{product.stock} un.</Badge></div><div className="mt-3 flex gap-2"><input type="number" min="1" value={amounts[product.id] || 5} onChange={(e) => setAmounts((current) => ({ ...current, [product.id]: e.target.value }))} className="w-28 rounded-xl border border-slate-200 px-3 py-2" /><button onClick={() => addStock(product, amounts[product.id] || 5)} className="rounded-xl bg-gradient-to-r from-blue-700 to-blue-600 px-3 py-2 text-sm font-bold text-white shadow-lg shadow-blue-700/20">Registrar entrada</button></div></div>)}</div></div><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold mb-4">Histórico de movimentações</h3><div className="space-y-3">{movements.map((movement) => <div key={movement.id} className="rounded-2xl bg-slate-50 p-4"><div className="flex justify-between gap-3"><b>{movement.productName}</b><Badge tone={movement.qty < 0 ? "red" : "green"}>{movement.qty > 0 ? "+" : ""}{movement.qty}</Badge></div><p className="text-xs text-slate-500">{movement.type} • {movement.date} • {movement.user}</p></div>)}</div></div></div></div>;
 }
 
 function PDV({ products, customers, cart, addToCart, updateCartQty, removeFromCart, finishSale, cartTotal }) {
@@ -595,7 +691,7 @@ function PDV({ products, customers, cart, addToCart, updateCartQty, removeFromCa
   const finalTotal = Math.max(cartTotal - (Number(discount) || 0), 0);
   const change = payment === "Dinheiro" ? Math.max((Number(amountPaid) || 0) - finalTotal, 0) : 0;
   const insufficientCash = payment === "Dinheiro" && cart.length > 0 && (Number(amountPaid) || 0) < finalTotal;
-  return <div><SectionTitle title="PDV / Frente de Caixa" subtitle="Venda com cliente, desconto, forma de pagamento, dinheiro e cálculo automático de troco." /><div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]"><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><div className="relative mb-4"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar produto por nome ou SKU..." className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div><div className="grid gap-3 md:grid-cols-2">{filtered.map((product) => <button key={product.id} onClick={() => addToCart(product)} className="text-left rounded-2xl border border-slate-100 p-4 hover:border-blue-300 hover:bg-blue-50"><div className="flex justify-between gap-3"><b>{product.name}</b><span className="font-bold text-blue-700">{currency(product.price)}</span></div><p className="text-xs text-slate-500">SKU {product.sku} • estoque {product.stock}</p></button>)}</div></div><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold flex items-center gap-2"><ShoppingCart size={18} /> Carrinho</h3><div className="mt-4 space-y-3 min-h-[170px]">{cart.length === 0 && <p className="text-sm text-slate-400">Nenhum produto adicionado.</p>}{cart.map((item) => <div key={item.productId} className="rounded-2xl bg-slate-50 p-4"><div className="flex justify-between gap-3"><b>{item.name}</b><button onClick={() => removeFromCart(item.productId)} className="text-red-600"><Trash2 size={16} /></button></div><div className="mt-2 flex items-center justify-between gap-3"><input type="number" min="1" value={item.qty} onChange={(e) => updateCartQty(item.productId, e.target.value)} className="w-20 rounded-xl border border-slate-200 px-3 py-2" /><p className="text-sm text-slate-500">{currency(item.qty * item.price)}</p></div></div>)}</div><div className="mt-5 border-t border-slate-100 pt-5 space-y-3"><Select label="Cliente" value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">Cliente não informado</option>{customers.filter((c) => c.status !== "Inativo").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select><Select label="Forma de pagamento" value={payment} onChange={(e) => setPayment(e.target.value)}><option>PIX</option><option>Dinheiro</option><option>Cartão de débito</option><option>Cartão de crédito</option><option>Outros</option></Select><Input label="Desconto" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} />{payment === "Dinheiro" && <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 space-y-3"><Input label="Valor recebido em dinheiro" type="number" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} /><div className="flex justify-between text-sm"><span>Valor recebido</span><b>{currency(amountPaid)}</b></div><div className="flex justify-between text-sm"><span>Troco</span><b className="text-emerald-700">{currency(change)}</b></div>{insufficientCash && <p className="text-sm font-medium text-red-600">Valor recebido menor que o total da venda.</p>}</div>}<div className="flex justify-between text-sm"><span>Subtotal</span><b>{currency(cartTotal)}</b></div><div className="flex justify-between text-sm"><span>Desconto</span><b>{currency(discount)}</b></div><div className="flex justify-between text-lg font-bold"><span>Total</span><span>{currency(finalTotal)}</span></div><button onClick={() => finishSale({ customerId, payment, discount, amountPaid, change })} disabled={insufficientCash} className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Finalizar venda</button></div></div></div></div>;
+  return <div><SectionTitle title="PDV / Frente de Caixa" subtitle="Venda com cliente, desconto, forma de pagamento, dinheiro e cálculo automático de troco." /><div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]"><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><div className="relative mb-4"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar produto por nome ou SKU..." className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div><div className="grid gap-3 md:grid-cols-2">{filtered.map((product) => <button key={product.id} onClick={() => addToCart(product)} className="text-left rounded-2xl border border-slate-100 p-4 hover:border-blue-300 hover:bg-blue-50"><div className="flex justify-between gap-3"><b>{product.name}</b><span className="font-bold text-blue-700">{currency(product.price)}</span></div><p className="text-xs text-slate-500">SKU {product.sku} • estoque {product.stock}</p></button>)}</div></div><div className="rounded-3xl bg-white p-6 shadow-sm border border-slate-100"><h3 className="font-bold flex items-center gap-2"><ShoppingCart size={18} /> Carrinho</h3><div className="mt-4 space-y-3 min-h-[170px]">{cart.length === 0 && <p className="text-sm text-slate-400">Nenhum produto adicionado.</p>}{cart.map((item) => <div key={item.productId} className="rounded-2xl bg-slate-50 p-4"><div className="flex justify-between gap-3"><b>{item.name}</b><button onClick={() => removeFromCart(item.productId)} className="text-red-600"><Trash2 size={16} /></button></div><div className="mt-2 flex items-center justify-between gap-3"><input type="number" min="1" value={item.qty} onChange={(e) => updateCartQty(item.productId, e.target.value)} className="w-20 rounded-xl border border-slate-200 px-3 py-2" /><p className="text-sm text-slate-500">{currency(item.qty * item.price)}</p></div></div>)}</div><div className="mt-5 border-t border-slate-100 pt-5 space-y-3"><Select label="Cliente" value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">Cliente não informado</option>{customers.filter((c) => c.status !== "Inativo").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select><Select label="Forma de pagamento" value={payment} onChange={(e) => setPayment(e.target.value)}><option>PIX</option><option>Dinheiro</option><option>Cartão de débito</option><option>Cartão de crédito</option><option>Outros</option></Select><Input label="Desconto" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} />{payment === "Dinheiro" && <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 space-y-3"><Input label="Valor recebido em dinheiro" type="number" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} /><div className="flex justify-between text-sm"><span>Valor recebido</span><b>{currency(amountPaid)}</b></div><div className="flex justify-between text-sm"><span>Troco</span><b className="text-emerald-700">{currency(change)}</b></div>{insufficientCash && <p className="text-sm font-medium text-red-600">Valor recebido menor que o total da venda.</p>}</div>}<div className="flex justify-between text-sm"><span>Subtotal</span><b>{currency(cartTotal)}</b></div><div className="flex justify-between text-sm"><span>Desconto</span><b>{currency(discount)}</b></div><div className="flex justify-between text-lg font-bold"><span>Total</span><span>{currency(finalTotal)}</span></div><button onClick={() => finishSale({ customerId, payment, discount, amountPaid, change })} disabled={insufficientCash} className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-3 font-bold text-white shadow-lg shadow-emerald-700/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50">Finalizar venda</button></div></div></div></div>;
 }
 
 function Customers({ customers, saveCustomer, deleteCustomer, sales }) {
