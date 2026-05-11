@@ -94,6 +94,7 @@ const menu = [
   { key: "pdv", label: "PDV", icon: ShoppingCart },
   { key: "customers", label: "Clientes", icon: Users },
   { key: "suppliers", label: "Fornecedores", icon: Truck },
+  { key: "settings", label: "Configurações", icon: Building2 },
   { key: "crm", label: "CRM", icon: UserRound },
   { key: "sales", label: "Vendas", icon: Receipt },
 ];
@@ -101,6 +102,16 @@ const menu = [
 const emptyProduct = { name: "", sku: "", category: "", description: "", cost: "", price: "", stock: "", minStock: "", status: "Ativo" };
 const emptyCustomer = { name: "", document: "", phone: "", email: "", address: "", birthday: "", notes: "", status: "Novo" };
 const emptySupplier = { name: "", document: "", phone: "", email: "", category: "", suppliedItems: "", address: "", notes: "", status: "Ativo" };
+const defaultCompanySettings = {
+  companyName: "Gestão Comercial Integrada",
+  fantasyName: "Sistema Web Comercial",
+  document: "00.000.000/0001-00",
+  phone: "(11) 99999-9999",
+  email: "contato@empresa.com",
+  address: "São Paulo - SP",
+  cityState: "São Paulo / SP",
+  receiptFooter: "Obrigado pela preferência!",
+};
 
 function getNextId(items, fallback = 1) {
   if (!items.length) return fallback;
@@ -371,6 +382,7 @@ function App() {
   const [products, setProducts] = useState(saved?.products || initialProducts);
   const [customers, setCustomers] = useState(saved?.customers || initialCustomers);
   const [suppliers, setSuppliers] = useState(saved?.suppliers || initialSuppliers);
+  const [companySettings, setCompanySettings] = useState(saved?.companySettings || defaultCompanySettings);
   const [sales, setSales] = useState(saved?.sales || initialSales);
   const [movements, setMovements] = useState(saved?.movements || initialMovements);
   const [cart, setCart] = useState([]);
@@ -386,8 +398,8 @@ function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify({ products, customers, suppliers, sales, movements }));
-  }, [products, customers, suppliers, sales, movements]);
+    localStorage.setItem(storageKey, JSON.stringify({ products, customers, suppliers, sales, movements, companySettings }));
+  }, [products, customers, suppliers, sales, movements, companySettings]);
 
   useEffect(() => {
     async function carregarDadosDoBanco() {
@@ -457,6 +469,7 @@ function App() {
     setProducts(initialProducts);
     setCustomers(initialCustomers);
     setSuppliers(initialSuppliers);
+    setCompanySettings(defaultCompanySettings);
     setSales(initialSales);
     setMovements(initialMovements);
     setCart([]);
@@ -881,6 +894,7 @@ function App() {
     if (active === "pdv") return <PDV products={products} customers={customers} cart={cart} addToCart={addToCart} updateCartQty={updateCartQty} removeFromCart={(id) => setCart((current) => current.filter((item) => item.productId !== id))} finishSale={finishSale} cartTotal={cartTotal} />;
     if (active === "customers") return <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} sales={sales} exportCustomers={exportCustomers} importCustomers={importCustomers} />;
     if (active === "suppliers") return <Suppliers suppliers={suppliers} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} exportSuppliers={exportSuppliers} importSuppliers={importSuppliers} />;
+    if (active === "settings") return <Settings companySettings={companySettings} setCompanySettings={setCompanySettings} showToast={showToast} />;
     if (active === "crm") return <CRM customers={customers} sales={sales} />;
     if (active === "sales") return <Sales sales={sales} cancelSale={cancelSale} />;
     return null;
@@ -911,7 +925,7 @@ function App() {
           </div>
         </div>
         {renderContent()}
-        {lastReceipt && <ReceiptModal sale={lastReceipt} onClose={() => setLastReceipt(null)} />}
+        {lastReceipt && <ReceiptModal sale={lastReceipt} companySettings={companySettings} operatorName={loggedUserName} onClose={() => setLastReceipt(null)} />}
       </main>
     </div>
   );
@@ -1206,6 +1220,17 @@ function SupplierForm({ form, setForm, onSubmit }) {
   return <div className="grid gap-4 md:grid-cols-2"><Input label="Nome do fornecedor" value={form.name} onChange={(e) => update("name", e.target.value)} /><Input label="CNPJ/Documento" value={form.document} onChange={(e) => update("document", e.target.value)} /><Input label="Telefone" value={form.phone} onChange={(e) => update("phone", e.target.value)} /><Input label="E-mail" value={form.email} onChange={(e) => update("email", e.target.value)} /><Input label="Categoria" value={form.category} onChange={(e) => update("category", e.target.value)} /><Input label="Produtos/serviços fornecidos" value={form.suppliedItems} onChange={(e) => update("suppliedItems", e.target.value)} /><Input label="Endereço" value={form.address} onChange={(e) => update("address", e.target.value)} /><Select label="Status" value={form.status} onChange={(e) => update("status", e.target.value)}><option>Ativo</option><option>Inativo</option><option>Em avaliação</option></Select><div className="md:col-span-2"><Input label="Observações" value={form.notes} onChange={(e) => update("notes", e.target.value)} /></div><div className="md:col-span-2 flex justify-end"><button onClick={onSubmit} className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-blue-700/20 transition hover:scale-[1.01] hover:shadow-blue-700/30 flex items-center gap-2"><Save size={18} /> Salvar fornecedor</button></div></div>;
 }
 
+function Settings({ companySettings, setCompanySettings, showToast }) {
+  const [form, setForm] = useState(companySettings);
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const saveSettings = () => {
+    setCompanySettings(form);
+    showToast("Configurações da empresa salvas com sucesso.");
+  };
+
+  return <div><SectionTitle title="Configurações da Empresa" subtitle="Personalize os dados da empresa que aparecem no comprovante e na apresentação do sistema." /><div className="rounded-[1.75rem] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.07)] backdrop-blur"><div className="grid gap-4 md:grid-cols-2"><Input label="Nome da empresa" value={form.companyName} onChange={(e) => update("companyName", e.target.value)} /><Input label="Nome fantasia" value={form.fantasyName} onChange={(e) => update("fantasyName", e.target.value)} /><Input label="CNPJ" value={form.document} onChange={(e) => update("document", e.target.value)} /><Input label="Telefone" value={form.phone} onChange={(e) => update("phone", e.target.value)} /><Input label="E-mail" value={form.email} onChange={(e) => update("email", e.target.value)} /><Input label="Cidade/UF" value={form.cityState} onChange={(e) => update("cityState", e.target.value)} /><div className="md:col-span-2"><Input label="Endereço" value={form.address} onChange={(e) => update("address", e.target.value)} /></div><div className="md:col-span-2"><Input label="Texto do rodapé do comprovante" value={form.receiptFooter} onChange={(e) => update("receiptFooter", e.target.value)} /></div></div><div className="mt-6 flex justify-end"><button onClick={saveSettings} className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-blue-700/20 transition hover:scale-[1.01] hover:shadow-blue-700/30 flex items-center gap-2"><Save size={18} /> Salvar configurações</button></div></div><div className="mt-6 rounded-[1.75rem] border border-blue-100 bg-blue-50 p-6 text-blue-900"><p className="text-sm font-semibold">Prévia dos dados no comprovante</p><h3 className="mt-2 text-2xl font-black">{form.companyName}</h3><p className="text-sm">{form.fantasyName}</p><p className="mt-2 text-sm">CNPJ: {form.document}</p><p className="text-sm">Telefone: {form.phone} • E-mail: {form.email}</p><p className="text-sm">{form.address} — {form.cityState}</p><p className="mt-3 text-sm font-semibold">{form.receiptFooter}</p></div></div>;
+}
+
 function CRM({ customers, sales }) {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const selectedSales = selectedCustomer ? sales.filter((sale) => sale.customerId === selectedCustomer.id) : [];
@@ -1220,8 +1245,27 @@ function formatDateTime(value) {
 
 function Sales({ sales, cancelSale }) {
   const [selectedSale, setSelectedSale] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("Todos");
+  const [paymentFilter, setPaymentFilter] = useState("Todas");
+  const [customerFilter, setCustomerFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
 
-  return <div><SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas, detalhes, pagamento e cancelamento com usuário, data e hora." /><DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Recebido", "Troco", "Desconto", "Total", "Status", "Cancelamento", "Ações"]}>{sales.map((sale) => <tr key={sale.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4 font-bold">#{sale.id}</td><td className="p-4">{sale.date}</td><td className="p-4">{sale.customerName || "Não informado"}</td><td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td><td className="p-4">{sale.payment}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.amountPaid) : "—"}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.change) : "—"}</td><td className="p-4">{currency(sale.discount)}</td><td className="p-4 font-bold">{currency(getSaleTotal(sale))}</td><td className="p-4"><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{sale.status}</Badge></td><td className="p-4 text-xs text-slate-500">{sale.status === "Cancelada" ? <div><b className="text-slate-700">{sale.canceledBy || "Administrador"}</b><p>{formatDateTime(sale.canceledAt)}</p></div> : "—"}</td><td className="p-4"><div className="flex gap-2"><button onClick={() => setSelectedSale(sale)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100" title="Ver detalhes"><Eye size={18} /></button><button disabled={sale.status === "Cancelada"} onClick={() => cancelSale(sale)} className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700 disabled:opacity-40">Cancelar</button></div></td></tr>)}</DataTable>{selectedSale && <SaleDetailsModal sale={selectedSale} onClose={() => setSelectedSale(null)} />}</div>;
+  const filteredSales = sales.filter((sale) => {
+    const statusOk = statusFilter === "Todos" || sale.status === statusFilter;
+    const paymentOk = paymentFilter === "Todas" || sale.payment === paymentFilter;
+    const customerOk = !customerFilter || (sale.customerName || "").toLowerCase().includes(customerFilter.toLowerCase());
+    const dateOk = !dateFilter || sale.date === dateFilter;
+    return statusOk && paymentOk && customerOk && dateOk;
+  });
+
+  const clearFilters = () => {
+    setStatusFilter("Todos");
+    setPaymentFilter("Todas");
+    setCustomerFilter("");
+    setDateFilter("");
+  };
+
+  return <div><SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas com filtros por status, forma de pagamento, cliente, data e auditoria de cancelamento." actions={<button onClick={clearFilters} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50">Limpar filtros</button>} /><div className="mb-5 grid gap-3 rounded-[1.75rem] border border-white/70 bg-white/90 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.07)] backdrop-blur md:grid-cols-4"><Select label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option>Todos</option><option>Concluída</option><option>Cancelada</option></Select><Select label="Pagamento" value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)}><option>Todas</option><option>PIX</option><option>Dinheiro</option><option>Cartão de débito</option><option>Cartão de crédito</option><option>Outros</option></Select><Input label="Cliente" value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="Buscar por cliente" /><Input label="Data" type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} /></div><DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Recebido", "Troco", "Desconto", "Total", "Status", "Cancelamento", "Ações"]}>{filteredSales.map((sale) => <tr key={sale.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4 font-bold">#{sale.id}</td><td className="p-4">{sale.date}</td><td className="p-4">{sale.customerName || "Não informado"}</td><td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td><td className="p-4">{sale.payment}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.amountPaid) : "—"}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.change) : "—"}</td><td className="p-4">{currency(sale.discount)}</td><td className="p-4 font-bold">{currency(getSaleTotal(sale))}</td><td className="p-4"><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{sale.status}</Badge></td><td className="p-4 text-xs text-slate-500">{sale.status === "Cancelada" ? <div><b className="text-slate-700">{sale.canceledBy || "Administrador"}</b><p>{formatDateTime(sale.canceledAt)}</p></div> : "—"}</td><td className="p-4"><div className="flex gap-2"><button onClick={() => setSelectedSale(sale)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100" title="Ver detalhes"><Eye size={18} /></button><button disabled={sale.status === "Cancelada"} onClick={() => cancelSale(sale)} className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700 disabled:opacity-40">Cancelar</button></div></td></tr>)}</DataTable>{filteredSales.length === 0 && <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm font-semibold text-amber-700">Nenhuma venda encontrada com os filtros selecionados.</div>}{selectedSale && <SaleDetailsModal sale={selectedSale} onClose={() => setSelectedSale(null)} />}</div>;
 }
 
 function SaleDetailsModal({ sale, onClose }) {
@@ -1262,7 +1306,7 @@ function SaleDetailsModal({ sale, onClose }) {
   );
 }
 
-function ReceiptModal({ sale, onClose }) {
+function ReceiptModal({ sale, companySettings, operatorName, onClose }) {
   const subtotal = sale.items.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0);
 
   const getReceiptHtml = () => `
@@ -1297,8 +1341,10 @@ function ReceiptModal({ sale, onClose }) {
           <div class="header">
             <div>
               <div class="tag">Comprovante de venda</div>
-              <h1>Gestão Comercial Integrada</h1>
-              <div class="muted">Projeto Integrador — UNIVESP</div>
+              <h1>${escaparXml(companySettings.companyName)}</h1>
+              <div class="muted">${escaparXml(companySettings.fantasyName)} • CNPJ: ${escaparXml(companySettings.document)}</div>
+              <div class="muted">${escaparXml(companySettings.phone)} • ${escaparXml(companySettings.email)}</div>
+              <div class="muted">${escaparXml(companySettings.address)} — ${escaparXml(companySettings.cityState)}</div>
             </div>
             <div style="text-align:right">
               <strong>Venda #${sale.id}</strong><br />
@@ -1308,6 +1354,7 @@ function ReceiptModal({ sale, onClose }) {
           <div class="grid">
             <div class="box"><span>Cliente</span><strong>${sale.customerName || "Cliente não informado"}</strong></div>
             <div class="box"><span>Forma de pagamento</span><strong>${sale.payment}</strong></div>
+            <div class="box"><span>Operador</span><strong>${escaparXml(operatorName)}</strong></div>
           </div>
           <table>
             <thead><tr><th>Item</th><th>Qtd.</th><th>Valor</th><th>Subtotal</th></tr></thead>
@@ -1321,7 +1368,7 @@ function ReceiptModal({ sale, onClose }) {
             ${sale.payment === "Dinheiro" ? `<div class="row"><span>Valor recebido</span><span>${currency(sale.amountPaid)}</span></div><div class="row"><span>Troco</span><span>${currency(sale.change)}</span></div>` : ""}
             <div class="total"><span>Total</span><span>${currency(getSaleTotal(sale))}</span></div>
           </div>
-          <p class="thanks">Obrigado pela preferência.</p>
+          <p class="thanks">${escaparXml(companySettings.receiptFooter)}</p>
         </section>
         <script>window.onload = () => window.print();</script>
       </body>
@@ -1343,15 +1390,17 @@ function ReceiptModal({ sale, onClose }) {
           <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-5">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-700">Comprovante</p>
-              <h2 className="mt-1 text-2xl font-black text-slate-950">Gestão Comercial Integrada</h2>
-              <p className="mt-1 text-sm text-slate-500">Projeto Integrador — UNIVESP</p>
+              <h2 className="mt-1 text-2xl font-black text-slate-950">{companySettings.companyName}</h2>
+              <p className="mt-1 text-sm text-slate-500">{companySettings.fantasyName} • CNPJ: {companySettings.document}</p>
+              <p className="text-sm text-slate-500">{companySettings.phone} • {companySettings.email}</p>
+              <p className="text-sm text-slate-500">{companySettings.address} — {companySettings.cityState}</p>
             </div>
             <div className="text-right text-sm text-slate-500"><p>Venda #{sale.id}</p><p>{sale.date}</p></div>
           </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-2"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-400">Cliente</p><b>{sale.customerName || "Cliente não informado"}</b></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-400">Pagamento</p><b>{sale.payment}</b></div></div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-400">Cliente</p><b>{sale.customerName || "Cliente não informado"}</b></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-400">Pagamento</p><b>{sale.payment}</b></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-400">Operador</p><b>{operatorName}</b></div></div>
           <div className="mt-5 space-y-3">{sale.items.map((item) => <div key={`${sale.id}-recibo-${item.productId}`} className="flex items-center justify-between rounded-2xl border border-slate-100 p-4"><div><b>{item.name}</b><p className="text-xs text-slate-500">{item.qty} x {currency(item.price)}</p></div><b>{currency(item.qty * item.price)}</b></div>)}</div>
           <div className="mt-5 rounded-2xl bg-slate-950 p-5 text-white"><div className="flex justify-between text-sm text-slate-300"><span>Subtotal</span><span>{currency(subtotal)}</span></div><div className="mt-2 flex justify-between text-sm text-slate-300"><span>Desconto</span><span>{currency(sale.discount)}</span></div>{sale.payment === "Dinheiro" && <><div className="mt-2 flex justify-between text-sm text-slate-300"><span>Valor recebido</span><span>{currency(sale.amountPaid)}</span></div><div className="mt-2 flex justify-between text-sm text-slate-300"><span>Troco</span><span>{currency(sale.change)}</span></div></>}<div className="mt-4 flex justify-between border-t border-white/10 pt-4 text-2xl font-black"><span>Total</span><span>{currency(getSaleTotal(sale))}</span></div></div>
-          <p className="mt-5 text-center text-xs text-slate-400">Obrigado pela preferência.</p>
+          <p className="mt-5 text-center text-xs text-slate-400">{companySettings.receiptFooter}</p>
         </div>
       </div>
       <div className="mt-6 flex flex-col gap-3 md:flex-row md:justify-end"><button onClick={printReceipt} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center justify-center gap-2"><Printer size={16} /> Imprimir comprovante</button><button onClick={printReceipt} className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 shadow-sm hover:bg-blue-100 flex items-center justify-center gap-2"><Download size={16} /> Baixar PDF</button><button onClick={onClose} className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20">Nova venda</button></div>
