@@ -187,6 +187,8 @@ function vendaParaBanco(venda) {
     troco: Number(venda.change) || 0,
     total: getSaleTotal(venda),
     status: venda.status || "Concluída",
+    cancelado_por: venda.canceledBy || null,
+    cancelado_em: venda.canceledAt || null,
   };
 }
 
@@ -201,6 +203,8 @@ function vendaDoBanco(venda, itens = []) {
     amountPaid: Number(venda.valor_recebido) || 0,
     change: Number(venda.troco) || 0,
     status: venda.status || "Concluída",
+    canceledBy: venda.cancelado_por || "",
+    canceledAt: venda.cancelado_em || "",
     items: itens.map((item) => ({
       productId: item.produto_id,
       name: item.produto_nome,
@@ -373,6 +377,7 @@ function App() {
   const [toast, setToast] = useState("");
   const [usingDatabase, setUsingDatabase] = useState(false);
   const [lastReceipt, setLastReceipt] = useState(null);
+  const loggedUserName = "Administrador";
 
   const showToast = (message) => {
     setToast(message);
@@ -679,21 +684,29 @@ function App() {
 
   const cancelSale = async (sale) => {
     if (sale.status === "Cancelada") return;
+
+    const canceledAt = new Date().toISOString();
+    const canceledBy = loggedUserName;
+
     const newMovements = sale.items.map((item, index) => ({
       id: getNextId(movements) + index,
       date: today,
       productName: item.name,
       type: "Cancelamento",
       qty: item.qty,
-      user: "Administrador",
+      user: canceledBy,
     }));
 
     try {
       if (usingDatabase) {
-        const { error: vendaError } = await supabase.from("vendas").update({ status: "Cancelada" }).eq("id", sale.id);
+        const { error: vendaError } = await supabase.from("vendas").update({
+          status: "Cancelada",
+          cancelado_por: canceledBy,
+          cancelado_em: canceledAt,
+        }).eq("id", sale.id);
         if (vendaError) throw vendaError;
 
-        const movimentosBanco = sale.items.map((item) => movimentoParaBanco({ productName: item.name, type: "Cancelamento", qty: item.qty, user: "Administrador" }, item.productId));
+        const movimentosBanco = sale.items.map((item) => movimentoParaBanco({ productName: item.name, type: "Cancelamento", qty: item.qty, user: canceledBy }, item.productId));
         const { data: movimentosCriados, error: movimentosError } = await supabase.from("movimentacoes_estoque").insert(movimentosBanco).select();
         if (movimentosError) throw movimentosError;
 
@@ -705,13 +718,13 @@ function App() {
         newMovements.splice(0, newMovements.length, ...(movimentosCriados || []).map(movimentoDoBanco));
       }
 
-      setSales((current) => current.map((currentSale) => currentSale.id === sale.id ? { ...currentSale, status: "Cancelada" } : currentSale));
+      setSales((current) => current.map((currentSale) => currentSale.id === sale.id ? { ...currentSale, status: "Cancelada", canceledBy, canceledAt } : currentSale));
       setProducts((current) => current.map((product) => {
         const item = sale.items.find((saleItem) => saleItem.productId === product.id);
         return item ? { ...product, stock: product.stock + item.qty } : product;
       }));
       setMovements((current) => [...newMovements, ...current]);
-      showToast("Venda cancelada e itens devolvidos ao estoque.");
+      showToast(`Venda cancelada por ${canceledBy}. Itens devolvidos ao estoque.`);
     } catch {
       showToast("Não foi possível cancelar a venda no Supabase.");
     }
@@ -1200,10 +1213,15 @@ function CRM({ customers, sales }) {
   return <div><SectionTitle title="CRM" subtitle="Análise do relacionamento, frequência, oportunidades e histórico de compras dos clientes." /><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{customers.map((customer) => { const customerSales = sales.filter((sale) => sale.customerId === customer.id && sale.status === "Concluída"); const total = customerSales.reduce((sum, sale) => sum + getSaleTotal(sale), 0); return <div key={customer.id} className="rounded-[1.75rem] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.07)] backdrop-blur transition hover:-translate-y-1"><div className="flex items-start justify-between gap-3"><div><h3 className="font-black text-slate-950">{customer.name}</h3><p className="text-sm text-slate-500">{customer.phone}</p></div><Badge tone={customer.status === "Recorrente" ? "green" : customer.status === "Inativo" ? "slate" : "blue"}>{customer.status}</Badge></div><div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Compras</p><b>{customerSales.length}</b></div><div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Total</p><b>{currency(total)}</b></div></div><p className="mt-4 text-sm text-slate-500">{customer.notes || "Sem observações."}</p>{customerSales.length === 0 ? <p className="mt-3 text-sm font-semibold text-amber-600">Oportunidade: cliente sem compra recente.</p> : <p className="mt-3 text-sm font-semibold text-emerald-600">Cliente com histórico de compra.</p>}<button onClick={() => setSelectedCustomer(customer)} className="mt-5 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 flex items-center justify-center gap-2"><Eye size={16} /> Visualizar histórico de compras</button></div>; })}</div>{selectedCustomer && <Modal title={`Histórico de compras — ${selectedCustomer.name}`} onClose={() => setSelectedCustomer(null)}>{selectedSales.length === 0 ? <div className="rounded-2xl bg-amber-50 p-5 text-sm font-semibold text-amber-700">Este cliente ainda não possui compras registradas.</div> : <div className="space-y-3">{selectedSales.map((sale) => <div key={sale.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4"><div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><b className="text-slate-950">Venda #{sale.id}</b><p className="text-xs text-slate-500">{sale.date} • {sale.payment} • {sale.status}</p></div><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{currency(getSaleTotal(sale))}</Badge></div><div className="mt-3 text-sm text-slate-600">{sale.items.map((item) => <p key={`${sale.id}-${item.productId}`}>{item.qty}x {item.name} — {currency(item.price)}</p>)}</div>{sale.payment === "Dinheiro" && <div className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-600"><p>Recebido: <b>{currency(sale.amountPaid)}</b></p><p>Troco: <b>{currency(sale.change)}</b></p></div>}</div>)}</div>}</Modal>}</div>;
 }
 
+function formatDateTime(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
 function Sales({ sales, cancelSale }) {
   const [selectedSale, setSelectedSale] = useState(null);
 
-  return <div><SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas, detalhes, pagamento e cancelamento com devolução ao estoque." /><DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Recebido", "Troco", "Desconto", "Total", "Status", "Ações"]}>{sales.map((sale) => <tr key={sale.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4 font-bold">#{sale.id}</td><td className="p-4">{sale.date}</td><td className="p-4">{sale.customerName || "Não informado"}</td><td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td><td className="p-4">{sale.payment}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.amountPaid) : "—"}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.change) : "—"}</td><td className="p-4">{currency(sale.discount)}</td><td className="p-4 font-bold">{currency(getSaleTotal(sale))}</td><td className="p-4"><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{sale.status}</Badge></td><td className="p-4"><div className="flex gap-2"><button onClick={() => setSelectedSale(sale)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100" title="Ver detalhes"><Eye size={18} /></button><button disabled={sale.status === "Cancelada"} onClick={() => cancelSale(sale)} className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700 disabled:opacity-40">Cancelar</button></div></td></tr>)}</DataTable>{selectedSale && <SaleDetailsModal sale={selectedSale} onClose={() => setSelectedSale(null)} />}</div>;
+  return <div><SectionTitle title="Histórico de Vendas" subtitle="Consulta de vendas, detalhes, pagamento e cancelamento com usuário, data e hora." /><DataTable headers={["Venda", "Data", "Cliente", "Itens", "Pagamento", "Recebido", "Troco", "Desconto", "Total", "Status", "Cancelamento", "Ações"]}>{sales.map((sale) => <tr key={sale.id} className="border-t border-slate-100 hover:bg-slate-50/70"><td className="p-4 font-bold">#{sale.id}</td><td className="p-4">{sale.date}</td><td className="p-4">{sale.customerName || "Não informado"}</td><td className="p-4 text-sm">{sale.items.map((item) => `${item.qty}x ${item.name}`).join(", ")}</td><td className="p-4">{sale.payment}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.amountPaid) : "—"}</td><td className="p-4">{sale.payment === "Dinheiro" ? currency(sale.change) : "—"}</td><td className="p-4">{currency(sale.discount)}</td><td className="p-4 font-bold">{currency(getSaleTotal(sale))}</td><td className="p-4"><Badge tone={sale.status === "Concluída" ? "green" : "red"}>{sale.status}</Badge></td><td className="p-4 text-xs text-slate-500">{sale.status === "Cancelada" ? <div><b className="text-slate-700">{sale.canceledBy || "Administrador"}</b><p>{formatDateTime(sale.canceledAt)}</p></div> : "—"}</td><td className="p-4"><div className="flex gap-2"><button onClick={() => setSelectedSale(sale)} className="rounded-xl bg-blue-50 p-2 text-blue-700 hover:bg-blue-100" title="Ver detalhes"><Eye size={18} /></button><button disabled={sale.status === "Cancelada"} onClick={() => cancelSale(sale)} className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700 disabled:opacity-40">Cancelar</button></div></td></tr>)}</DataTable>{selectedSale && <SaleDetailsModal sale={selectedSale} onClose={() => setSelectedSale(null)} />}</div>;
 }
 
 function SaleDetailsModal({ sale, onClose }) {
@@ -1238,6 +1256,8 @@ function SaleDetailsModal({ sale, onClose }) {
         <div className="rounded-2xl bg-emerald-50 p-4 text-emerald-800"><p className="text-sm">Total</p><b className="text-xl">{currency(getSaleTotal(sale))}</b></div>
         <div className="rounded-2xl bg-slate-50 p-4 text-slate-700"><p className="text-sm">Recebido / Troco</p><b className="text-xl">{sale.payment === "Dinheiro" ? `${currency(sale.amountPaid)} / ${currency(sale.change)}` : "—"}</b></div>
       </div>
+
+      {sale.status === "Cancelada" && <div className="mt-5 rounded-2xl bg-red-50 p-4 text-red-800"><p className="text-sm font-semibold">Registro de cancelamento</p><p className="mt-1 text-sm">Cancelado por: <b>{sale.canceledBy || "Administrador"}</b></p><p className="text-sm">Data e hora: <b>{formatDateTime(sale.canceledAt)}</b></p></div>}
     </Modal>
   );
 }
