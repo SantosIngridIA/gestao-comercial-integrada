@@ -997,7 +997,7 @@ function Sidebar({ active, onNavigate, onLogout, open, onClose }) {
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#1d4ed8_0,#0f172a_38%,#020617_100%)]" />
 
-        <div className="relative z-10 flex h-full flex-col">
+        <div className="relative z-10 flex h-full min-h-0 flex-col">
           <div className="flex items-center justify-between border-b border-white/10 pb-5">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-gradient-to-br from-emerald-400 to-blue-500 p-3 text-white shadow-lg shadow-blue-950/40">
@@ -1013,7 +1013,7 @@ function Sidebar({ active, onNavigate, onLogout, open, onClose }) {
             </button>
           </div>
 
-          <nav className="mt-7 space-y-2 flex-1">
+          <nav className="mt-7 flex-1 space-y-2 overflow-y-auto pr-1 [scrollbar-color:rgba(255,255,255,0.35)_transparent] [scrollbar-width:thin]">
             {menu.map((item) => {
               const Icon = item.icon;
               const isActive = active === item.key;
