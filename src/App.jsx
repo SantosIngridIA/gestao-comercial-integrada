@@ -979,17 +979,55 @@ function LoginScreen({ onLogin }) {
 }
 
 function Input({ label, value, onChange, type = "text", defaultValue, placeholder }) {
-  return <label className="block"><span className="text-sm font-medium text-slate-700">{label}</span><input type={type} value={value} onChange={onChange} defaultValue={defaultValue} placeholder={placeholder} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" /></label>;
+  return (
+    <label className="block">
+      <span className="text-sm font-bold text-slate-700">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={onChange}
+        defaultValue={defaultValue}
+        placeholder={placeholder}
+        className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3.5 text-base outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
+      />
+    </label>
+  );
 }
 
 function Select({ label, value, onChange, children }) {
-  return <label className="block"><span className="text-sm font-medium text-slate-700">{label}</span><select value={value} onChange={onChange} className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 bg-white">{children}</select></label>;
+  return (
+    <label className="block">
+      <span className="text-sm font-bold text-slate-700">{label}</span>
+      <select
+        value={value}
+        onChange={onChange}
+        className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-base outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
+      >
+        {children}
+      </select>
+    </label>
+  );
 }
 
 function Modal({ title, children, onClose }) {
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"><motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-3xl rounded-3xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto"><div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-bold text-slate-950">{title}</h2><button onClick={onClose} className="rounded-xl p-2 hover:bg-slate-100"><X size={20} /></button></div>{children}</motion.div></div>;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-2 backdrop-blur-sm sm:items-center sm:p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-h-[92vh] w-full overflow-y-auto rounded-t-[2rem] bg-white p-4 shadow-2xl sm:max-w-3xl sm:rounded-[2rem] sm:p-6"
+      >
+        <div className="sticky top-0 z-10 mb-5 flex items-center justify-between border-b border-slate-100 bg-white/95 pb-4 backdrop-blur">
+          <h2 className="text-lg font-black text-slate-950 sm:text-xl">{title}</h2>
+          <button onClick={onClose} className="rounded-xl bg-slate-100 p-3 text-slate-700 hover:bg-slate-200">
+            <X size={20} />
+          </button>
+        </div>
+        {children}
+      </motion.div>
+    </div>
+  );
 }
-
 function Badge({ children, tone = "blue" }) {
   const styles = { blue: "bg-blue-50 text-blue-700 ring-blue-100", green: "bg-emerald-50 text-emerald-700 ring-emerald-100", red: "bg-red-50 text-red-700 ring-red-100", amber: "bg-amber-50 text-amber-700 ring-amber-100", slate: "bg-slate-100 text-slate-700 ring-slate-200" };
   return <span className={`inline-flex rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${styles[tone] || styles.blue}`}>{children}</span>;
@@ -1144,11 +1182,46 @@ function Dashboard({ sales, products, customers, lowStock, resetData }) {
 }
 
 function Toolbar({ query, setQuery, placeholder, button, onClick }) {
-  return <div className="mb-5 flex flex-col md:flex-row gap-3 md:items-center md:justify-between"><div className="relative flex-1"><Search className="absolute left-4 top-3.5 text-slate-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-500" /></div><button onClick={onClick} className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-blue-700/20 transition hover:scale-[1.01] hover:shadow-blue-700/30 flex items-center justify-center gap-2"><Plus size={18} /> {button}</button></div>;
+  return (
+    <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="relative flex-1">
+        <Search className="absolute left-4 top-4 text-slate-400" size={18} />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={placeholder}
+          className="w-full rounded-2xl border border-slate-200 py-3.5 pl-11 pr-4 text-base outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
+        />
+      </div>
+      <button
+        onClick={onClick}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-700 to-blue-600 px-5 py-3.5 font-bold text-white shadow-lg shadow-blue-700/20 transition hover:scale-[1.01] hover:shadow-blue-700/30 lg:w-auto"
+      >
+        <Plus size={18} /> {button}
+      </button>
+    </div>
+  );
 }
 
 function DataTable({ headers, children }) {
-  return <div className="overflow-hidden rounded-[1.75rem] border border-white/70 bg-white/90 shadow-[0_20px_60px_rgba(15,23,42,0.07)] backdrop-blur"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-950 text-slate-100"><tr>{headers.map((header) => <th key={header} className="p-4 text-xs font-black uppercase tracking-[0.16em] whitespace-nowrap">{header}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{children}</tbody></table></div></div>;
+  return (
+    <div className="overflow-hidden rounded-[1.75rem] border border-white/70 bg-white/90 shadow-[0_20px_60px_rgba(15,23,42,0.07)] backdrop-blur">
+      <div className="w-full overflow-x-auto">
+        <table className="min-w-[980px] w-full text-left text-xs sm:text-sm">
+          <thead className="bg-slate-950 text-slate-100">
+            <tr>
+              {headers.map((header) => (
+                <th key={header} className="whitespace-nowrap p-4 text-xs font-black uppercase tracking-[0.16em]">
+                  {header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">{children}</tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 function Products({ products, saveProduct, deleteProduct, exportProducts, importProducts }) {
